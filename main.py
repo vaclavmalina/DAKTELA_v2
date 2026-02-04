@@ -1,8 +1,6 @@
 import streamlit as st
 from modules import dashboard, harvester
 
-TEST TEST TEST
-
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
     page_title="Balíkobot Data Centrum",
