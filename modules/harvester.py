@@ -209,7 +209,7 @@ def render_harvester():
     else:
         with st.container():
             st.subheader("1. Nastavení filtru")
-            st.markdown("<h2 style='text-align: center; margin-top: -10px;'>**Datum**</h2>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Datum</h2>", unsafe_allow_html=True)
             c_date1, c_date2 = st.columns(2)
             with c_date1: d_from = st.date_input("Od", key="filter_date_from", format="DD.MM.YYYY")
             with c_date2: d_to = st.date_input("Do", key="filter_date_to", format="DD.MM.YYYY")
