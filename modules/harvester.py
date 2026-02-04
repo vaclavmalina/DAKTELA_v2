@@ -209,7 +209,7 @@ def render_harvester():
     else:
         with st.container():
             st.subheader("1. Nastavení filtru")
-            st.markdown("<h3 style='text-align: center; margin-top: -18px;'>Datum</h2>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; margin-top: -10px; font-size: 16px;'>Datum</h3>", unsafe_allow_html=True)
             c_date1, c_date2 = st.columns(2)
             with c_date1: d_from = st.date_input("Od", key="filter_date_from", format="DD.MM.YYYY")
             with c_date2: d_to = st.date_input("Do", key="filter_date_to", format="DD.MM.YYYY")
@@ -218,6 +218,7 @@ def render_harvester():
             b_r2 = st.columns(3); b_r2[0].button("Poslední 3 měsíce", use_container_width=True, on_click=cb_last_3_months); b_r2[1].button("Minulý měsíc", use_container_width=True, on_click=cb_last_month); b_r2[2].button("Tento měsíc", use_container_width=True, on_click=cb_this_month)
             b_r3 = st.columns(3); b_r3[0].button("Minulý týden", use_container_width=True, on_click=cb_last_week); b_r3[1].button("Tento týden", use_container_width=True, on_click=cb_this_week); b_r3[2].button("Včerejšek", use_container_width=True, on_click=cb_yesterday)
             st.divider()
+            st.markdown("<h2 style='text-align: center; margin-top: -10px; font-size: 16px;'>Kategorie & Status</h3>", unsafe_allow_html=True)
             c_filt1, c_filt2 = st.columns(2)
             with c_filt1:
                 cat_idx = get_index(cat_options_map, st.session_state.selected_cat_key)
