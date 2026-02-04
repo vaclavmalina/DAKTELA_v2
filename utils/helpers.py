@@ -3,12 +3,19 @@ import unicodedata
 from datetime import datetime
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from presidio_analyzer.nlp_engine import NlpEngineProvider
 import streamlit as st
 from config import CARRIERS_DATA
 
 @st.cache_resource
 def load_anonymizer():
-    return AnalyzerEngine(), AnonymizerEngine()
+    provider = NlpEngineProvider(nlp_configuration={
+        "nlp_engine_name": "spacy",
+        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]
+    })
+    nlp_engine = provider.create_engine()
+    
+    return AnalyzerEngine(nlp_engine=nlp_engine), AnonymizerEngine()
 
 analyzer, anonymizer = load_anonymizer()
  
@@ -20,7 +27,7 @@ def slugify(text):
 
 def anonymize_text(text):
     if not text: return ""
-    text = re.sub(r'(?i)(heslo|password|pwd|pass|access_token)(\s*[:=]\s*)(\S+)', r'\1\2[HESLO]', text)
+    text = re.sub(r'(?i)(heslo|password|pwd|pass|access_token|token|klic|key|dsw|customer_ID|zakaznicke_cislo)(\s*[:=]\s*)(\S+)', r'\1\2[HESLO]', text)
     text = re.sub(r'(\+?420\s?|(?:\b))(\d{3}\s?\d{3}\s?\d{3})\b', '[TELEFON]', text)
     results = analyzer.analyze(text=text, entities=["EMAIL_ADDRESS", "PHONE_NUMBER", "IP_ADDRESS"], language='en')
     anonymized_result = anonymizer.anonymize(text=text, analyzer_results=results)
