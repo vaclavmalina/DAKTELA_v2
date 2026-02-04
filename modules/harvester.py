@@ -52,7 +52,7 @@ def render_harvester():
             st.session_state.harvester_phase = "filter"
             st.rerun()
     with col_title:
-        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>🔎 Analýza ticketů</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>🔎 Analýza dicketů</h2>", unsafe_allow_html=True)
     st.divider()
 
     # --- Inicializace proměnných ---
