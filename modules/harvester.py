@@ -209,7 +209,7 @@ def render_harvester():
     else:
         with st.container():
             st.subheader("1. Nastavení filtru")
-            st.markdown("<h2 style='text-align: center; margin-top: -10px; font-size: 16px;'>Datum</h3>", unsafe_allow_html=True)
+            st.markdown("<h2 style='text-align: center; margin-top: -10px; font-size: 16px;'>📅 Datum</h3>", unsafe_allow_html=True)
             c_date1, c_date2 = st.columns(2)
             with c_date1: d_from = st.date_input("Od", key="filter_date_from", format="DD.MM.YYYY")
             with c_date2: d_to = st.date_input("Do", key="filter_date_to", format="DD.MM.YYYY")
@@ -222,12 +222,12 @@ def render_harvester():
             c_filt1, c_filt2 = st.columns(2)
             with c_filt1:
                 cat_idx = get_index(cat_options_map, st.session_state.selected_cat_key)
-                sel_cat_label = st.selectbox("Kategorie", options=list(cat_options_map.keys()), index=cat_idx, key="sb_category")
+                sel_cat_label = st.selectbox("📂 Kategorie", options=list(cat_options_map.keys()), index=cat_idx, key="sb_category")
                 st.session_state.selected_cat_key = cat_options_map[sel_cat_label]
                 st.button("Vybrat vše (Kategorie)", use_container_width=True, on_click=reset_cat_callback)
             with c_filt2:
                 stat_idx = get_index(stat_options_map, st.session_state.selected_stat_key)
-                sel_stat_label = st.selectbox("Status", options=list(stat_options_map.keys()), index=stat_idx, key="sb_status")
+                sel_stat_label = st.selectbox("🏷️ Status", options=list(stat_options_map.keys()), index=stat_idx, key="sb_status")
                 st.session_state.selected_stat_key = stat_options_map[sel_stat_label]
                 st.button("Vybrat vše (Status)", use_container_width=True, on_click=reset_stat_callback)
             st.write("")
