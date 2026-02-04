@@ -13,7 +13,7 @@ git add .
 
 :: 2. Vytvoreni commitu s vasim komentarem
 echo.
-set /p commit_msg="[2/3] Napiste popis zmeny (napr. oprava grafu): "
+set /p commit_msg="[2/3] Napiste popis zmeny: "
 git commit -m "%commit_msg%"
 
 :: 3. Odeslani na GitHub
