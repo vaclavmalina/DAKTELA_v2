@@ -6,8 +6,6 @@ from presidio_anonymizer import AnonymizerEngine
 import streamlit as st
 from config import CARRIERS_DATA
 
-TOTO JE TEST
-
 @st.cache_resource
 def load_anonymizer():
     return AnalyzerEngine(), AnonymizerEngine()
