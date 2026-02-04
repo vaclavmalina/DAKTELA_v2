@@ -209,9 +209,10 @@ def render_harvester():
     else:
         with st.container():
             st.subheader("1. Nastavení filtru")
+            st.markdown("**Datum**")
             c_date1, c_date2 = st.columns(2)
-            with c_date1: d_from = st.date_input("Datum od", key="filter_date_from", format="DD.MM.YYYY")
-            with c_date2: d_to = st.date_input("Datum do", key="filter_date_to", format="DD.MM.YYYY")
+            with c_date1: d_from = st.date_input("Od", key="filter_date_from", format="DD.MM.YYYY")
+            with c_date2: d_to = st.date_input("Do", key="filter_date_to", format="DD.MM.YYYY")
             st.caption("Rychlý výběr období:")
             b_r1 = st.columns(3); b_r1[0].button("Tento rok", use_container_width=True, on_click=cb_this_year); b_r1[1].button("Minulý rok", use_container_width=True, on_click=cb_last_year); b_r1[2].button("Poslední půl rok", use_container_width=True, on_click=cb_last_half_year)
             b_r2 = st.columns(3); b_r2[0].button("Poslední 3 měsíce", use_container_width=True, on_click=cb_last_3_months); b_r2[1].button("Minulý měsíc", use_container_width=True, on_click=cb_last_month); b_r2[2].button("Tento měsíc", use_container_width=True, on_click=cb_this_month)
