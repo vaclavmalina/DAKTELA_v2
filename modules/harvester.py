@@ -177,7 +177,7 @@ def render_harvester():
         with col_dl1: st.download_button(label="💾 STÁHNOUT ZPRACOVANÁ DATA", data=json_data, file_name=f"data_{c_name}_{s_name}_{ts}.json", mime="application/json", use_container_width=True)
         with col_dl2: st.download_button(label="💾 STÁHNOUT SEZNAM TICKETŮ", data=st.session_state.id_list_txt, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True)
         st.write("")
-        if st.button("🔄 Začít znovu / Nová analýza", type="primary", use_container_width=True):
+        if st.button("🔄 Začít znovu", type="primary", use_container_width=True):
             st.session_state.harvester_phase = "filter"; st.rerun()
         st.markdown("**Náhled dat (první ticket):**")
         st.code(json.dumps(st.session_state.export_data[0] if st.session_state.export_data else {}, ensure_ascii=False, indent=2), language="json")
