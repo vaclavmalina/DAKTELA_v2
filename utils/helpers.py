@@ -65,3 +65,52 @@ def identify_side(title, email, is_user=False):
         if (slug and f"@{slug}." in clean_email) or (slug and clean_email.endswith(f"@{slug}.com")) or (name.lower() in clean_title):
             return f"Dopravce ({name})"
     return f"Klient ({title})" if title else "Klient"
+
+def cervene_tlacitko(label, key):
+    """
+    Vykreslí červené tlačítko.
+    Použití: if cervene_tlacitko("⛔ Smazat", "btn_smazat"): ...
+    """
+    # 1. Vytvoříme unikátní kontejner pro CSS
+    container = st.container()
+    
+    # 2. Vložíme tlačítko
+    with container:
+        clicked = st.button(label, key=key, use_container_width=True)
+        
+    # 3. Obarvíme ho pomocí CSS (zacílíme na tento konkrétní element)
+    # Trik: Použijeme HTML/CSS, které ovlivní element s konkrétním data-testid uvnitř tohoto bloku
+    st.markdown(f"""
+        <style>
+        /* Najdi tlačítko uvnitř elementu, který má tento specifický key v názvu */
+        div.stButton > button[kind="secondary"]:active {{
+             background-color: #7B241C !important; /* Tmavě červená při kliku */
+        }}
+        /* Toto je složitější selector, zkusíme jednodušší variantu pro konkrétní button */
+        /* Zacílíme na tlačítko, které následuje po skriptu. */
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # NEJLEPŠÍ METODA PRO ČERVENOU (Columns Hack) - vložte toto místo toho nahoře:
+    return clicked
+
+def render_red_style():
+    """Tuto funkci zavolejte JEDNOU na začátku stránky (např. v harvester.py), 
+    pokud na ní plánujete červená tlačítka."""
+    st.markdown("""
+    <style>
+    /* Vytvoříme třídu .red-button pro budoucí použití (pokud by to streamlit podporoval) */
+    /* Zde natvrdo přebarvíme tlačítka, která mají v textu 'STOP' nebo 'SMAZAT' */
+    
+    button:has(p:contains('STOP')), button:has(p:contains('Stop')), 
+    button:has(p:contains('ZASTAVIT')), button:has(div:contains('ZASTAVIT')) {
+        background-color: #C0392B !important;
+        color: white !important;
+        border-color: #C0392B !important;
+    }
+    button:has(p:contains('Stop')):hover, button:has(div:contains('ZASTAVIT')):hover {
+        background-color: #A93226 !important;
+        border-color: #A93226 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)

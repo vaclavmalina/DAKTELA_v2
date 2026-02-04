@@ -198,7 +198,7 @@ def render_harvester():
             s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
             found_ids = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
             col_d1, col_d2, col_d3 = st.columns([1, 2, 1])
-            with col_d2: st.download_button(label="⬇💾 STÁHNOUT SEZNAM TICKETŮ", data=found_ids, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True,type="primary")
+            with col_d2: st.download_button(label="💾 STÁHNOUT SEZNAM TICKETŮ", data=found_ids, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True,type="primary")
             st.write(""); st.write("Kolik ticketů chcete hloubkově zpracovat?")
             limit_val = st.number_input("Limit (0 = zpracovat všechny nalezené)", min_value=0, max_value=count, value=min(count, 50))
             st.write("")
