@@ -5,7 +5,7 @@ def show_wip_msg(module_name):
 
 def render_dashboard():
     st.markdown("<h1 style='text-align: center;'>🗂️ Balíkobot Data Centrum</h1>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True) # ZMĚNA: Přidána mezera pod nadpisem
+    st.markdown("<br>", unsafe_allow_html=True)
 
     menu_items = [
         {"label": "🔎\nAnalýza ticketů", "action": "harvester"},
