@@ -13,7 +13,7 @@ def test_gemini():
     try:
         # Volání modelu
         response = client.models.generate_content(
-            model='gemini-2.0-flash', 
+            model='gemini-1.5-flash', 
             contents="Analyzuj tento ticket a urči kategorii (Technický dotaz, Fakturace, Pochvala). Odpověz pouze v JSON." + \
                      "\n\nObsah ticketu: Dobrý den, nemůžu se přihlásit do systému, hází mi to chybu 500."
         )
