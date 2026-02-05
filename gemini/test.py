@@ -1,29 +1,28 @@
-import streamlit as st  # PŘIDÁNO: Nutné pro st.secrets
+import streamlit as st
 from google import genai
 import json
 
-# 1. Načtení klíče ze secrets.toml
+# Načtení klíče
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-
-# 2. Inicializace AI klienta (PŘIDÁNO: client musí existovat)
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-def test_gemini():
-    print("Odesílám dotaz do Gemini API...")
+def diagnose_and_test():
+    print("--- DIAGNOSTIKA MODELŮ ---")
     try:
-        # Volání modelu
+        # Vypíšeme seznam dostupných modelů pro tvůj klíč
+        for m in client.models.list():
+            print(f"Dostupný model: {m.name}")
+            
+        print("\n--- TEST VOLÁNÍ (Gemini 1.5 Flash) ---")
+        # Zkusíme volat model bez prefixu 'models/'
         response = client.models.generate_content(
             model='gemini-1.5-flash', 
-            contents="Analyzuj tento ticket a urči kategorii (Technický dotaz, Fakturace, Pochvala). Odpověz pouze v JSON." + \
-                     "\n\nObsah ticketu: Dobrý den, nemůžu se přihlásit do systému, hází mi to chybu 500."
+            contents="Napiš 'Ahoj, jsem online' pokud mě slyšíš."
         )
-        
-        print("\n--- ODPOVĚĎ OD AI ---")
-        print(response.text)
-        print("---------------------")
+        print(f"Odpověď: {response.text}")
         
     except Exception as e:
         print(f"Nastala chyba: {e}")
 
 if __name__ == "__main__":
-    test_gemini()
+    diagnose_and_test()
