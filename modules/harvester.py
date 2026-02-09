@@ -137,7 +137,7 @@ def render_harvester():
     # --- Header ---
     col_back, col_title, col_void = st.columns([1, 4, 1])
     with col_back:
-        if st.button("⬅️ Menu"):
+        if st.button("⬅️ Menu", key="menu_btn"):
             st.session_state.current_app = "dashboard"
             st.session_state.harvester_phase = "filter"
             st.rerun()
@@ -191,10 +191,10 @@ def render_harvester():
         
         st.write(""); st.subheader("3. Probíhá zpracování dat..."); st.write("")
         
-        # Tlačítko STOP (Jediné tlačítko zde)
+        # Tlačítko STOP - UNIKÁTNÍ KEY "stop_btn"
         col_stop1, col_stop2, col_stop3 = st.columns([1, 2, 1])
         with col_stop2:
-            if st.button("🛑 ZASTAVIT PROCES", use_container_width=True):
+            if st.button("🛑 ZASTAVIT PROCES", use_container_width=True, key="stop_btn"):
                 st.session_state.stop_requested = True; st.session_state.harvester_phase = "selection"; st.rerun()
 
         # Placeholdery
@@ -226,8 +226,8 @@ def render_harvester():
                 except Exception as e:
                     status.update(label="❌ Chyba spojení s AI!", state="error")
                     st.error(f"Nepodařilo se spojit s ChatGPT API.\nDetail: {e}")
-                    st.warning("Řešení: Vypněte AI analýzu nebo kontaktujte podporu.")
-                    if st.button("⬅️ Zpět na výběr"):
+                    # Tlačítko Zpět s unikátním KEY "back_btn_err"
+                    if st.button("⬅️ Zpět na výběr", key="back_btn_err"):
                         st.session_state.harvester_phase = "selection"
                         st.rerun()
                     st.stop()
@@ -416,7 +416,7 @@ def render_harvester():
             )
 
         st.write(""); st.divider()
-        if st.button("🔄 Začít znovu", type="secondary", use_container_width=True):
+        if st.button("🔄 Začít znovu", type="secondary", use_container_width=True, key="restart_btn"):
             st.session_state.harvester_phase = "filter"; st.rerun()
         
         with st.expander("👀 Náhled dat (první ticket)"):
@@ -426,7 +426,8 @@ def render_harvester():
     elif st.session_state.harvester_phase == "selection":
         col_x1, col_x2, col_x3 = st.columns([1, 2, 1])
         with col_x2:
-            if st.button("❌ Zavřít výsledky a upravit zadání", use_container_width=True):
+            # Tlačítko ZAVŘÍT s unikátním KEY "close_selection_btn"
+            if st.button("❌ Zavřít výsledky a upravit zadání", use_container_width=True, key="close_selection_btn"):
                 st.session_state.harvester_phase = "filter"; st.rerun()
         
         st.subheader("2. Výsledek hledání")
@@ -485,7 +486,8 @@ def render_harvester():
                         st.caption("💨 Pouze stažení dat")
 
             st.write("")
-            if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True):
+            # Tlačítko SPUSTIT s unikátním KEY "start_processing_btn"
+            if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True, key="start_processing_btn"):
                 st.session_state.final_limit = limit_val
                 st.session_state.stop_requested = False
                 st.session_state.use_ai_analysis = use_ai 
@@ -521,7 +523,7 @@ def render_harvester():
                 st.button("Vybrat vše (Status)", use_container_width=True, on_click=reset_stat_callback)
             
             st.write("")
-            if st.button("🔍 VYHLEDAT TICKETY", type="primary", use_container_width=True):
+            if st.button("🔍 VYHLEDAT TICKETY", type="primary", use_container_width=True, key="search_tickets_btn"):
                 params = {"filter[logic]": "and", "filter[filters][0][field]": "created", "filter[filters][0][operator]": "gte", "filter[filters][0][value]": f"{st.session_state.filter_date_from} 00:00:00", "filter[filters][1][field]": "created", "filter[filters][1][operator]": "lte", "filter[filters][1][value]": f"{st.session_state.filter_date_to} 23:59:59", "fields[0]": "name", "fields[1]": "title", "fields[2]": "created", "fields[3]": "customFields", "fields[4]": "category", "fields[5]": "statuses"}
                 filter_idx = 2
                 if st.session_state.selected_cat_key != "ALL": params[f"filter[filters][{filter_idx}][field]"] = "category"; params[f"filter[filters][{filter_idx}][operator]"] = "eq"; params[f"filter[filters][{filter_idx}][value]"] = st.session_state.selected_cat_key; filter_idx += 1
