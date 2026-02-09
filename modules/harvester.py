@@ -186,7 +186,7 @@ def render_harvester():
     # --- FÁZE 3: PROCESSING ---
     if st.session_state.harvester_phase == "processing":
         
-        # UI Info panel
+        # 1. UI Info panel (Datum, Kategorie, Stav AI)
         with st.container(border=True):
             st.info(f"**Právě zpracovávám data pro:**\n\n"
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
@@ -194,17 +194,20 @@ def render_harvester():
         
         st.write(""); st.subheader("3. Probíhá zpracování dat..."); st.write("")
         
+        # Tlačítko pro zastavení (jediné tlačítko v této fázi)
         col_stop1, col_stop2, col_stop3 = st.columns([1, 2, 1])
         with col_stop2:
             if st.button("🛑 ZASTAVIT PROCES", use_container_width=True):
                 st.session_state.stop_requested = True; st.session_state.harvester_phase = "selection"; st.rerun()
 
-        # Placeholder pro stav
-        status_container = st.empty()
-        progress_bar = st.progress(0); status_text = st.empty(); eta_text = st.empty()
-        cost_text = st.empty()
+        # Placeholdery pro progress bar a texty (musí být definovány před smyčkou)
+        status_container = st.empty() # Pro AI connection status
+        progress_bar = st.progress(0)
+        status_text = st.empty()      # "Zpracovávám ticket X/Y"
+        eta_text = st.empty()         # "Zbývá 30s"
+        token_text = st.empty()       # "Použité tokeny: 1500"
 
-        # --- KROK 1: KONTROLA AI (pokud je zapnuto) ---
+        # --- KROK 1: KONTROLA AI SPOJENÍ (běží jen jednou na začátku) ---
         client = None
         if st.session_state.use_ai_analysis:
             if not OPENAI_KEY:
@@ -214,25 +217,25 @@ def render_harvester():
                     st.rerun()
                 st.stop()
             
-            # Kontrola spojení uvnitř statusu (vypadá to jako loading)
-            with status_container.status("🧠 Navazuji spojení s OpenAI...", expanded=True) as status:
+            # Zobrazí se jako dočasný loading bar
+            with status_container.status("🤖 Navazuji spojení s OpenAI...", expanded=True) as status:
                 try:
-                    time.sleep(0.5) # Malá pauza pro efekt
+                    time.sleep(0.5)
                     client = OpenAI(api_key=OPENAI_KEY)
-                    client.models.list() 
+                    client.models.list() # Ping
                     status.update(label="✅ Spojení s AI navázáno!", state="complete", expanded=False)
-                    time.sleep(1) # Aby si uživatel stihl přečíst OK
-                    status_container.empty() # Skryjeme status po úspěchu
+                    time.sleep(1)
+                    status_container.empty() # Po úspěchu zmizí, aby nezavazel
                 except Exception as e:
                     status.update(label="❌ Chyba spojení s AI!", state="error")
                     st.error(f"Nepodařilo se spojit s ChatGPT API.\nDetail: {e}")
-                    st.warning("Řešení: Vypněte AI analýzu a zpracujte pouze data bez použití AI, nebo kontaktujte podporu.")
+                    st.warning("Řešení: Vypněte AI analýzu nebo kontaktujte podporu.")
                     if st.button("⬅️ Zpět na výběr"):
                         st.session_state.harvester_phase = "selection"
                         st.rerun()
                     st.stop()
 
-        # --- KROK 2: TĚŽBA DAT ---
+        # --- KROK 2: PŘÍPRAVA DAT ---
         combined_cut_regex = re.compile("|".join(CUT_OFF_PATTERNS + HISTORY_PATTERNS), re.IGNORECASE | re.MULTILINE)
         tickets_to_process = st.session_state.found_tickets
         if st.session_state.final_limit > 0: tickets_to_process = tickets_to_process[:st.session_state.final_limit]
@@ -240,11 +243,16 @@ def render_harvester():
         full_export_data = []; start_time = time.time(); total_count = len(tickets_to_process)
         current_cost = 0.0; current_tokens = 0
 
+        # --- KROK 3: HLAVNÍ SMYČKA ---
         for idx, t_obj in enumerate(tickets_to_process):
             if st.session_state.stop_requested: break
             t_num = t_obj.get('name')
             
+            # Aktualizace textu o průběhu
             status_msg = f"📥 Zpracovávám ticket **{idx + 1}/{total_count}**: `{t_num}`"
+            if st.session_state.use_ai_analysis:
+                status_msg += " + 🧠 AI Analýza"
+            status_text.markdown(status_msg)
 
             try:
                 # 1. Stažení aktivit z Daktely
@@ -257,6 +265,7 @@ def render_harvester():
                         break
                     except: time.sleep(1)
                 
+                # Zpracování ticketu (Parsing)
                 t_date, t_time = format_date_split(t_obj.get('created'))
                 t_status = t_obj.get('statuses', [{}])[0].get('title', 'N/A') if isinstance(t_obj.get('statuses'), list) and t_obj.get('statuses') else "N/A"
                 custom_fields = t_obj.get('customFields', {})
@@ -313,7 +322,9 @@ def render_harvester():
                         cost = (in_tokens / 1_000_000 * PRICE_INPUT_1M) + (out_tokens / 1_000_000 * PRICE_OUTPUT_1M)
                         
                         current_cost += cost; current_tokens += total_t
-                        cost_text.caption(f"🪙 Tokeny: {current_tokens} | 💰 Cena: ${current_cost:.4f}")
+                        
+                        # Zobrazujeme POUZE tokeny (cenu ne)
+                        token_text.caption(f"🪙 Použité tokeny: **{current_tokens}**")
 
                         ai_result = json.loads(response.choices[0].message.content)
                         ticket_entry.update(ai_result)
@@ -324,13 +335,15 @@ def render_harvester():
 
             except Exception: pass
             
+            # Aktualizace progress baru a ETA
             progress_bar.progress((idx + 1) / total_count)
             elapsed = time.time() - start_time
             if idx > 0:
-                avg_per_item = elapsed / (idx + 1); remaining_sec = (total_count - (idx + 1)) * avg_per_item
-                eta_text.caption(f"⏱️ Zbývá cca: {int(remaining_sec)} sekund")
+                avg_per_item = elapsed / (idx + 1)
+                remaining_sec = (total_count - (idx + 1)) * avg_per_item
+                eta_text.caption(f"⏱️ Zbývá cca: **{int(remaining_sec)}** sekund")
 
-        # Konec loopu - Ukládání výsledků
+        # --- KONEC LOOPU: Výpočet finálních statistik ---
         elapsed = time.time() - start_time
         if elapsed < 60: duration_str = f"{int(elapsed)}s"
         elif elapsed < 3600: duration_str = f"{elapsed/60:.1f} m".replace('.', ',')
@@ -351,184 +364,7 @@ def render_harvester():
         st.session_state.export_data = full_export_data
         st.session_state.id_list_txt = final_ids_list
         
-        if st.session_state.use_ai_analysis:
-            st.session_state.csv_stats_bytes = generate_csv_stats_bytes(full_export_data)
-        else:
-            st.session_state.csv_stats_bytes = None
-
-        st.session_state.harvester_phase = "results"; st.rerun()
-        
-        # 1. KROK: KONTROLA AI SPOJENÍ (pokud je zapnuto)
-        client = None
-        if st.session_state.use_ai_analysis:
-            if not OPENAI_KEY:
-                st.error("❌ Chybí API klíč pro OpenAI v secrets.toml!")
-                if st.button("Vypnout AI a pokračovat jen se zpracováním dat"):
-                    st.session_state.use_ai_analysis = False
-                    st.rerun()
-                st.stop()
-            
-            with st.status("🤖 Kontrola spojení s OpenAI...", expanded=False) as status:
-                try:
-                    client = OpenAI(api_key=OPENAI_KEY)
-                    client.models.list() 
-                    status.update(label="✅ Spojení s AI navázáno!", state="complete", expanded=False)
-                    time.sleep(0.5)
-                except Exception as e:
-                    status.update(label="❌ Chyba spojení s AI!", state="error")
-                    st.error(f"Nepodařilo se spojit s ChatGPT API.\nDetail: {e}")
-                    st.warning("Řešení: Vypněte AI analýzu a vytěžte pouze data, nebo kontaktujte podporu.")
-                    if st.button("⬅️ Zpět na výběr"):
-                        st.session_state.harvester_phase = "selection"
-                        st.rerun()
-                    st.stop()
-
-        # UI Info panel
-        with st.container(border=True):
-            st.info(f"**Právě zpracovávám data pro:**\n\n"
-                    f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
-                    f"🧠 **AI Analýza:** {'Aktivní ✅ (GPT-4o-mini)' if st.session_state.use_ai_analysis else 'Neaktivní ❌'}")
-        
-        st.write(""); st.subheader("3. Probíhá zpracování dat..."); st.write("")
-        
-        col_stop1, col_stop2, col_stop3 = st.columns([1, 2, 1])
-        with col_stop2:
-            if st.button("🛑 ZASTAVIT PROCES", use_container_width=True):
-                st.session_state.stop_requested = True; st.session_state.harvester_phase = "selection"; st.rerun()
-
-        progress_bar = st.progress(0); status_text = st.empty(); eta_text = st.empty()
-        cost_text = st.empty() # Placeholder pro cenu
-
-        combined_cut_regex = re.compile("|".join(CUT_OFF_PATTERNS + HISTORY_PATTERNS), re.IGNORECASE | re.MULTILINE)
-        tickets_to_process = st.session_state.found_tickets
-        if st.session_state.final_limit > 0: tickets_to_process = tickets_to_process[:st.session_state.final_limit]
-
-        full_export_data = []; start_time = time.time(); total_count = len(tickets_to_process)
-        
-        # Reset počítadel pro tento běh
-        current_cost = 0.0
-        current_tokens = 0
-
-        for idx, t_obj in enumerate(tickets_to_process):
-            if st.session_state.stop_requested: break
-            t_num = t_obj.get('name')
-            
-            status_msg = f"📥 Zpracovávám ticket **{idx + 1}/{total_count}**: `{t_num}`"
-
-            try:
-                # 1. Stažení aktivit z Daktely
-                acts = []
-                for attempt in range(3):
-                    try:
-                        res_act = requests.get(f"{INSTANCE_URL}/api/v6/tickets/{t_num}/activities.json", headers={'X-AUTH-TOKEN': ACCESS_TOKEN}, timeout=30)
-                        res_act.raise_for_status()
-                        acts = res_act.json().get('result', {}).get('data', [])
-                        break
-                    except: time.sleep(1)
-                
-                t_date, t_time = format_date_split(t_obj.get('created'))
-                t_status = t_obj.get('statuses', [{}])[0].get('title', 'N/A') if isinstance(t_obj.get('statuses'), list) and t_obj.get('statuses') else "N/A"
-                custom_fields = t_obj.get('customFields', {})
-                vip_list = custom_fields.get('vip', [])
-                ticket_clientType = "VIP" if "→ VIP KLIENT ←" in vip_list else "Standard"
-                
-                ticket_entry = {
-                    "ticket_number": t_num, 
-                    "ticket_name": t_obj.get('title', 'Bez předmětu'), 
-                    "ticket_clientType": ticket_clientType, 
-                    "ticket_category": t_obj.get('category', {}).get('title', 'N/A') if t_obj.get('category') else "N/A", 
-                    "ticket_status": t_status, 
-                    "ticket_creationDate": t_date, 
-                    "ticket_creationTime": t_time, 
-                    "activities": []
-                }
-
-                # 2. Čištění aktivit
-                for a_idx, act in enumerate(sorted(acts, key=lambda x: x.get('time', '')), 1):
-                    item = act.get('item') or {}; address = item.get('address', '')
-                    cleaned = clean_html(item.get('text') or act.get('description'))
-                    if not cleaned: continue
-                    if any(re.search(p, cleaned, re.IGNORECASE) for p in NOISE_PATTERNS): cleaned = "[AUTOMATICKÝ EMAIL BALÍKOBOTU]"
-                    else:
-                        match = combined_cut_regex.search(cleaned)
-                        if match: cleaned = cleaned[:match.start()].strip() + "\n\n[PODPIS]"
-                    
-                    u_title = (act.get('user') or {}).get('title'); c_title = (act.get('contact') or {}).get('title'); direction = item.get('direction', 'out')
-                    if direction == "in": sender = identify_side(c_title, address, is_user=False); recipient = "Balíkobot"
-                    else: sender = identify_side(u_title, "", is_user=True); recipient = identify_side(c_title, address, is_user=False)
-                    
-                    a_date, a_time = format_date_split(act.get('time')); act_type = act.get('type') or "COMMENT"
-                    act_data = {"activity_number": a_idx, "activity_type": act_type, "activity_sender": sender}
-                    if act_type != "COMMENT": act_data["activity_recipient"] = recipient
-                    act_data.update({"activity_creationDate": a_date, "activity_creationTime": a_time, "activity_text": cleaned})
-                    ticket_entry["activities"].append(act_data)
-                
-                # 3. AI ANALÝZA (pokud je zapnuto)
-                if st.session_state.use_ai_analysis and client:
-                    try:
-                        ai_input = format_ticket_for_ai(ticket_entry)
-                        response = client.chat.completions.create(
-                            model='gpt-4o-mini',
-                            messages=[
-                                {'role': 'system', 'content': SYSTEM_PROMPT},
-                                {'role': 'user', 'content': ai_input}
-                            ],
-                            response_format={"type": "json_object"},
-                            temperature=0.1
-                        )
-                        
-                        # VÝPOČET CENY A TOKENŮ
-                        usage = response.usage
-                        in_tokens = usage.prompt_tokens
-                        out_tokens = usage.completion_tokens
-                        total_t = usage.total_tokens
-                        
-                        cost = (in_tokens / 1_000_000 * PRICE_INPUT_1M) + (out_tokens / 1_000_000 * PRICE_OUTPUT_1M)
-                        
-                        current_cost += cost
-                        current_tokens += total_t
-                        
-                        # Aktualizace zobrazení ceny v průběhu
-                        cost_text.caption(f"🪙 Použité tokeny: {current_tokens} tokenů")
-
-                        ai_result = json.loads(response.choices[0].message.content)
-                        ticket_entry.update(ai_result)
-                        
-                    except Exception as e:
-                        ticket_entry['ai_error'] = str(e)
-                        ticket_entry['new_status'] = "CHYBA AI"
-
-                full_export_data.append(ticket_entry)
-
-            except Exception: pass
-            
-            progress_bar.progress((idx + 1) / total_count)
-            elapsed = time.time() - start_time
-            if idx > 0:
-                avg_per_item = elapsed / (idx + 1); remaining_sec = (total_count - (idx + 1)) * avg_per_item
-                eta_text.caption(f"⏱️ Zbývá cca: {int(remaining_sec)} sekund")
-
-        # Konec loopu - Ukládání výsledků
-        elapsed = time.time() - start_time
-        if elapsed < 60: duration_str = f"{int(elapsed)}s"
-        elif elapsed < 3600: duration_str = f"{elapsed/60:.1f} m".replace('.', ',')
-        else: duration_str = f"{elapsed/3600:.1f} h".replace('.', ',')
-
-        final_ids_list = "SEZNAM ZPRACOVANÝCH ID\nDatum zpracování: {}\n------------------------------\n".format(datetime.now().strftime('%d.%m.%Y %H:%M'))
-        final_ids_list += "\n".join([str(t['ticket_number']) for t in full_export_data])
-        
-        st.session_state.stats = {
-            "tickets": len(full_export_data), 
-            "activities": sum(len(t.get('activities', [])) for t in full_export_data), 
-            "size": f"{len(json.dumps(full_export_data).encode('utf-8')) / 1024:.1f} KB",
-            "duration": duration_str,
-            "tokens": current_tokens,     # <--- NOVÉ
-            "cost": current_cost          # <--- NOVÉ
-        }
-        
-        st.session_state.export_data = full_export_data
-        st.session_state.id_list_txt = final_ids_list
-        
+        # Generování CSV
         if st.session_state.use_ai_analysis:
             st.session_state.csv_stats_bytes = generate_csv_stats_bytes(full_export_data)
         else:
