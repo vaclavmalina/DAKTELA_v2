@@ -332,13 +332,13 @@ def render_harvester():
 
     # --- FÁZE 4: RESULTS ---
     elif st.session_state.harvester_phase == "results":
-        st.success("🎉 Těžba dokončena!")
+        st.success("🎉 Zpracování dokončeno!")
         
         # Info panel
         info_text = f"**Použitý filtr:**\n\n" \
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n" \
                     f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n" \
-                    f"🤖 **AI Analýza:** {'PROVEDENA ✅' if st.session_state.use_ai_analysis else 'NEBYLA ZVOLENA ❌'}"
+                    f"**🤖 AI Analýza:** {'ZAPNUTA (GPT-4o-mini) ✅' if st.session_state.use_ai_analysis else 'VYPNUTA ❌'}")
         st.info(info_text)
 
         s = st.session_state.stats
@@ -393,11 +393,7 @@ def render_harvester():
             # Nastavení limitu
             st.write("Kolik ticketů chcete hloubkově zpracovat?")
             limit_val = st.number_input("Limit (0 = všechny)", min_value=0, max_value=count, value=min(count, 50))
-            
-            # NOVINKA: Checkbox pro AI
-            st.write("")
-            st.markdown("---")
-            use_ai = st.checkbox("🤖 **Zapnout AI analýzu ticketů** (GPT-4o-mini)", value=False, help="Každý ticket bude odeslán do ChatGPT pro určení příčiny a návrh řešení. Proces bude trvat déle.")
+            use_ai = st.checkbox("**🤖Zapnout AI analýzu ticketů** (GPT-4o-mini)", value=False, help="Každý ticket bude odeslán do ChatGPT pro určení příčiny a návrh řešení. Proces bude trvat déle.")
             
             if use_ai:
                 st.warning("⚠️ **Upozornění:** Zapnutá AI analýza prodlouží dobu zpracování (cca 2-4 sekundy na ticket) a čerpá kredity OpenAI.")
