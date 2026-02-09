@@ -181,6 +181,12 @@ def render_harvester():
     # --- FÁZE 3: PROCESSING ---
     if st.session_state.harvester_phase == "processing":
         
+        # !!!!!!!!!!!!! OPRAVA DUCHŮ !!!!!!!!!!!!!
+        # Tato pauza zajistí, že Streamlit stihne smazat tlačítka z minulé fáze
+        # dříve, než začne procesorově náročná operace.
+        time.sleep(0.2) 
+        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         # 1. UI Info panel
         with st.container(border=True):
             st.info(f"**Právě zpracovávám data pro:**\n\n"
@@ -191,14 +197,14 @@ def render_harvester():
         
         st.write(""); st.subheader("3. Probíhá zpracování dat..."); st.write("")
         
-        # Tlačítko STOP - UNIKÁTNÍ KEY "stop_btn"
+        # Tlačítko STOP
         col_stop1, col_stop2, col_stop3 = st.columns([1, 2, 1])
         with col_stop2:
             if st.button("🛑 ZASTAVIT PROCES", use_container_width=True, key="stop_btn"):
                 st.session_state.stop_requested = True; st.session_state.harvester_phase = "selection"; st.rerun()
 
         # Placeholdery
-        status_container = st.empty() # Pro loading AI
+        status_container = st.empty() 
         progress_bar = st.progress(0)
         status_text = st.empty()
         eta_text = st.empty()
@@ -214,7 +220,6 @@ def render_harvester():
                     st.rerun()
                 st.stop()
             
-            # Loading stav (Status)
             with status_container.status("🤖 Navazuji spojení s OpenAI...", expanded=True) as status:
                 try:
                     time.sleep(0.5)
@@ -222,17 +227,16 @@ def render_harvester():
                     client.models.list() 
                     status.update(label="✅ Spojení s AI navázáno!", state="complete", expanded=False)
                     time.sleep(1)
-                    status_container.empty() # Skrytí po úspěchu
+                    status_container.empty()
                 except Exception as e:
                     status.update(label="❌ Chyba spojení s AI!", state="error")
                     st.error(f"Nepodařilo se spojit s ChatGPT API.\nDetail: {e}")
-                    # Tlačítko Zpět s unikátním KEY "back_btn_err"
-                    if st.button("⬅️ Zpět na výběr", key="back_btn_err"):
+                    if st.button("⬅️ Zpět na výběr"):
                         st.session_state.harvester_phase = "selection"
                         st.rerun()
                     st.stop()
 
-        # --- KROK 2: INIT PROMĚNNÝCH ---
+        # --- KROK 2: INIT ---
         combined_cut_regex = re.compile("|".join(CUT_OFF_PATTERNS + HISTORY_PATTERNS), re.IGNORECASE | re.MULTILINE)
         tickets_to_process = st.session_state.found_tickets
         if st.session_state.final_limit > 0: tickets_to_process = tickets_to_process[:st.session_state.final_limit]
@@ -240,18 +244,17 @@ def render_harvester():
         full_export_data = []; start_time = time.time(); total_count = len(tickets_to_process)
         current_cost = 0.0; current_tokens = 0
 
-        # --- KROK 3: HLAVNÍ SMYČKA ---
+        # --- KROK 3: LOOP ---
         for idx, t_obj in enumerate(tickets_to_process):
             if st.session_state.stop_requested: break
             t_num = t_obj.get('name')
             
-            # Aktualizace statusu
             status_msg = f"📥 Zpracovávám ticket **{idx + 1}/{total_count}**: `{t_num}`"
             if st.session_state.use_ai_analysis: status_msg += " + 🧠 AI Analýza"
             status_text.markdown(status_msg)
 
             try:
-                # 1. Daktela Data
+                # 1. Daktela
                 acts = []
                 for attempt in range(3):
                     try:
@@ -298,7 +301,7 @@ def render_harvester():
                     act_data.update({"activity_creationDate": a_date, "activity_creationTime": a_time, "activity_text": cleaned})
                     ticket_entry["activities"].append(act_data)
                 
-                # 3. AI Analysis
+                # 3. AI
                 if st.session_state.use_ai_analysis and client:
                     try:
                         ai_input = format_ticket_for_ai(ticket_entry)
@@ -316,8 +319,7 @@ def render_harvester():
                         in_tokens = usage.prompt_tokens; out_tokens = usage.completion_tokens; total_t = usage.total_tokens
                         cost = (in_tokens / 1_000_000 * PRICE_INPUT_1M) + (out_tokens / 1_000_000 * PRICE_OUTPUT_1M)
                         current_cost += cost; current_tokens += total_t
-                        
-                        token_text.caption(f"🪙 Použité tokeny: **{current_tokens}**") # Pouze tokeny v průběhu
+                        token_text.caption(f"🪙 Použité tokeny: **{current_tokens}**")
 
                         ai_result = json.loads(response.choices[0].message.content)
                         ticket_entry.update(ai_result)
@@ -335,7 +337,7 @@ def render_harvester():
                 remaining_sec = (total_count - (idx + 1)) * avg_per_item
                 eta_text.caption(f"⏱️ Zbývá cca: **{int(remaining_sec)}** sekund")
 
-        # --- KONEC LOOPU ---
+        # --- KONEC ---
         elapsed = time.time() - start_time
         if elapsed < 60: duration_str = f"{int(elapsed)}s"
         elif elapsed < 3600: duration_str = f"{elapsed/60:.1f} m".replace('.', ',')
@@ -426,7 +428,6 @@ def render_harvester():
     elif st.session_state.harvester_phase == "selection":
         col_x1, col_x2, col_x3 = st.columns([1, 2, 1])
         with col_x2:
-            # Tlačítko ZAVŘÍT s unikátním KEY "close_selection_btn"
             if st.button("❌ Zavřít výsledky a upravit zadání", use_container_width=True, key="close_selection_btn"):
                 st.session_state.harvester_phase = "filter"; st.rerun()
         
@@ -486,7 +487,6 @@ def render_harvester():
                         st.caption("💨 Pouze stažení dat")
 
             st.write("")
-            # Tlačítko SPUSTIT s unikátním KEY "start_processing_btn"
             if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True, key="start_processing_btn"):
                 st.session_state.final_limit = limit_val
                 st.session_state.stop_requested = False
