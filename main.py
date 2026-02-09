@@ -1,5 +1,5 @@
 import streamlit as st
-from modules import harvester, main_menu
+from modules import harvester, main_menu, statistics
 
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
@@ -74,3 +74,7 @@ if st.session_state.current_app == "main_menu":
 
 elif st.session_state.current_app == "harvester":
     harvester.render_harvester()
+
+elif st.session_state.current_app == "statistics":
+    statistics.render_statistics()
+

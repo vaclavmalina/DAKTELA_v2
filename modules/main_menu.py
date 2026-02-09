@@ -24,9 +24,18 @@ def render_main_menu():
         for idx, item in enumerate(row):
             with cols[idx]:
                 if st.button(item["label"], use_container_width=True):
+                    
+                    # Logika pro Harvester
                     if item["action"] == "harvester":
                         st.session_state.current_app = "harvester"
                         st.rerun()
+                    
+                    # ZMĚNA: Přidána logika pro Statistiky
+                    elif item["action"] == "Statistiky":
+                        st.session_state.current_app = "statistics"
+                        st.rerun()
+                        
+                    # Ostatní tlačítka (WIP)
                     else:
                         show_wip_msg(item["action"])
         st.write("")
