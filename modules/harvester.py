@@ -209,7 +209,7 @@ def render_harvester():
         with st.container(border=True):
             st.info(f"**Právě zpracovávám data pro:**\n\n"
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
-                    f"🤖 **AI Analýza:** {'ZAPNUTA (GPT-4o-mini)' if st.session_state.use_ai_analysis else 'VYPNUTA'}")
+                    f"🧠 **AI Analýza:** {'Aktivní ✅ (GPT-4o-mini)' if st.session_state.use_ai_analysis else 'Neaktivní ❌'}")
         
         st.write(""); st.subheader("3. Probíhá těžba dat..."); st.write("")
         
@@ -232,7 +232,7 @@ def render_harvester():
             
             status_msg = f"📥 Zpracovávám ticket **{idx + 1}/{total_count}**: `{t_num}`"
             if st.session_state.use_ai_analysis:
-                status_msg += " + 🤖 AI Analýza"
+                status_msg += " + 🧠 AI Analýza"
             status_text.markdown(status_msg)
 
             try:
@@ -338,7 +338,7 @@ def render_harvester():
         info_text = f"**Použitý filtr:**\n\n" \
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n" \
                     f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n" \
-                    f"🧠 **AI Analýza:** {'Aktivovaná ✅' if st.session_state.use_ai_analysis else 'Neaktivní ❌'}"
+                    f"🧠 **AI Analýza:** {'Aktivní ✅' if st.session_state.use_ai_analysis else 'Neaktivní ❌'}"
         st.info(info_text)
 
         s = st.session_state.stats
@@ -355,15 +355,15 @@ def render_harvester():
         
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1: 
-            st.download_button(label="💾 STÁHNOUT JSON (LOG)", data=json_data, file_name=f"data_{c_name}_{s_name}_{ts}.json", mime="application/json", use_container_width=True)
+            st.download_button(label="💾 STÁHNOUT DATA TICKETŮ (JSON)", data=json_data, file_name=f"data_{c_name}_{s_name}_{ts}.json", mime="application/json", use_container_width=True)
         with col_dl2: 
-            st.download_button(label="💾 STÁHNOUT SEZNAM ID (TXT)", data=st.session_state.id_list_txt, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True)
+            st.download_button(label="💾 STÁHNOUT SEZNAM TICKETŮ (TXT)", data=st.session_state.id_list_txt, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True)
         
         # Tlačítko pro CSV statistiku (zobrazit jen pokud je dostupná)
         if st.session_state.csv_stats_bytes:
             st.write("")
             st.download_button(
-                label="📊 STÁHNOUT AI STATISTIKU (CSV pro Excel)", 
+                label="📊 STÁHNOUT AI STATISTIKU (CSV)", 
                 data=st.session_state.csv_stats_bytes, 
                 file_name=f"ai_stats_{c_name}_{s_name}_{ts}.csv", 
                 mime="text/csv", 
@@ -415,7 +415,7 @@ def render_harvester():
                 with col_sett1:
                     st.markdown("**🔢 Počet ticketů**")
                     # Checkbox pro "Všechny"
-                    process_all = st.checkbox("⚡ Zpracovat vše", value=False, help="Ignoruje limit a stáhne úplně všechny nalezené tickety.")
+                    process_all = st.checkbox("⚡ Zpracovat vše", value=False, help="Stáhne úplně všechny nalezené tickety.")
                     
                     if process_all:
                         limit_val = 0 # Interně 0 znamená vše
@@ -434,7 +434,7 @@ def render_harvester():
                 # PRAVÝ SLOUPEC: AI (Inteligence)
                 with col_sett2:
                     st.markdown("**🧠 AI Analýza**")
-                    use_ai = st.checkbox("Zapnout GPT-4o-mini", value=False, help="Odešle data do OpenAI pro analýzu příčiny.")
+                    use_ai = st.checkbox("Zapnout GPT-4o-mini", value=False, help="Odešle data do OpenAI pro analýzu.")
                     
                     if use_ai:
                         st.caption("⚠️ **Pomalé** (~3s/ticket)")
