@@ -17,6 +17,10 @@ try:
 except ImportError:
     SYSTEM_PROMPT = "Jsi asistent technické podpory. Analyzuj ticket a navrhni řešení."
 
+# CENÍK (GPT-4o-mini) - USD za 1M tokenů
+PRICE_INPUT_1M = 0.15
+PRICE_OUTPUT_1M = 0.60
+
 # --- CALLBACKY (FUNKCE PRO TLAČÍTKA - beze změny) ---
 def set_date_range(d_from, d_to): st.session_state.filter_date_from = d_from; st.session_state.filter_date_to = d_to
 def cb_this_year(): set_date_range(date(date.today().year, 1, 1), date.today())
@@ -64,7 +68,6 @@ def format_ticket_for_ai(ticket_entry):
         sender = act.get('activity_sender', 'Neznámý')
         text = act.get('activity_text', '')
         
-        # Oříznutí extrémně dlouhých zpráv (2000 znaků)
         limit = 2000
         if len(text) > limit:
             clean_text = text[:limit].replace('\n', ' ').replace(';', ',') + " [... TEXT ZKRÁCEN ...]"
@@ -81,20 +84,17 @@ def generate_csv_stats_bytes(analyzed_data):
     total = len(analyzed_data)
     if total == 0: return None
 
-    # Agregace
     stats = defaultdict(lambda: {
         "count": 0, "problems": [], "automation": [], "minimization": []
     })
 
     for item in analyzed_data:
-        # AI data jsou nyní sloučena přímo v položce ticketu
         status = item.get("new_status", "Nezpracováno")
         stats[status]["count"] += 1
         if item.get("problem_summary"): stats[status]["problems"].append(item["problem_summary"])
         if item.get("automation_suggestion"): stats[status]["automation"].append(item["automation_suggestion"])
         if item.get("minimization_suggestion"): stats[status]["minimization"].append(item["minimization_suggestion"])
 
-    # Vytvoření in-memory bufferu
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL)
     
@@ -121,7 +121,6 @@ def generate_csv_stats_bytes(analyzed_data):
             format_safe_cell(data["minimization"], 5)
         ])
     
-    # Převedení na bytes s BOM pro Excel
     return output.getvalue().encode('utf-8-sig')
 
 
@@ -130,7 +129,6 @@ def render_harvester():
     # Načtení Secrets
     INSTANCE_URL = st.secrets["DAKTELA_URL"]
     ACCESS_TOKEN = st.secrets["DAKTELA_TOKEN"]
-    # Klíč pro AI (načteme až při použití, ale kontrolujeme existenci)
     OPENAI_KEY = st.secrets.get("OPENAI_API_KEY")
 
     # --- Header ---
@@ -159,6 +157,8 @@ def render_harvester():
     # Nové session states pro AI
     if 'use_ai_analysis' not in st.session_state: st.session_state.use_ai_analysis = False
     if 'csv_stats_bytes' not in st.session_state: st.session_state.csv_stats_bytes = None
+    if 'ai_cost_total' not in st.session_state: st.session_state.ai_cost_total = 0.0
+    if 'ai_tokens_total' not in st.session_state: st.session_state.ai_tokens_total = 0
 
     # Načtení číselníků
     if 'categories' not in st.session_state:
@@ -192,7 +192,6 @@ def render_harvester():
             with st.status("🤖 Kontrola spojení s OpenAI...", expanded=False) as status:
                 try:
                     client = OpenAI(api_key=OPENAI_KEY)
-                    # Rychlý ping (list models)
                     client.models.list() 
                     status.update(label="✅ Spojení s AI navázáno!", state="complete", expanded=False)
                     time.sleep(0.5)
@@ -219,12 +218,17 @@ def render_harvester():
                 st.session_state.stop_requested = True; st.session_state.harvester_phase = "selection"; st.rerun()
 
         progress_bar = st.progress(0); status_text = st.empty(); eta_text = st.empty()
-        
+        cost_text = st.empty() # Placeholder pro cenu
+
         combined_cut_regex = re.compile("|".join(CUT_OFF_PATTERNS + HISTORY_PATTERNS), re.IGNORECASE | re.MULTILINE)
         tickets_to_process = st.session_state.found_tickets
         if st.session_state.final_limit > 0: tickets_to_process = tickets_to_process[:st.session_state.final_limit]
 
         full_export_data = []; start_time = time.time(); total_count = len(tickets_to_process)
+        
+        # Reset počítadel pro tento běh
+        current_cost = 0.0
+        current_tokens = 0
 
         for idx, t_obj in enumerate(tickets_to_process):
             if st.session_state.stop_requested: break
@@ -246,7 +250,6 @@ def render_harvester():
                         break
                     except: time.sleep(1)
                 
-                # Základní info ticketu
                 t_date, t_time = format_date_split(t_obj.get('created'))
                 t_status = t_obj.get('statuses', [{}])[0].get('title', 'N/A') if isinstance(t_obj.get('statuses'), list) and t_obj.get('statuses') else "N/A"
                 custom_fields = t_obj.get('customFields', {})
@@ -297,9 +300,24 @@ def render_harvester():
                             response_format={"type": "json_object"},
                             temperature=0.1
                         )
+                        
+                        # VÝPOČET CENY A TOKENŮ
+                        usage = response.usage
+                        in_tokens = usage.prompt_tokens
+                        out_tokens = usage.completion_tokens
+                        total_t = usage.total_tokens
+                        
+                        cost = (in_tokens / 1_000_000 * PRICE_INPUT_1M) + (out_tokens / 1_000_000 * PRICE_OUTPUT_1M)
+                        
+                        current_cost += cost
+                        current_tokens += total_t
+                        
+                        # Aktualizace zobrazení ceny v průběhu
+                        cost_text.caption(f"💰 Odhad ceny: **${current_cost:.4f}** ({current_tokens} tokenů)")
+
                         ai_result = json.loads(response.choices[0].message.content)
-                        # Sloučení výsledků do ticket_entry
                         ticket_entry.update(ai_result)
+                        
                     except Exception as e:
                         ticket_entry['ai_error'] = str(e)
                         ticket_entry['new_status'] = "CHYBA AI"
@@ -316,14 +334,9 @@ def render_harvester():
 
         # Konec loopu - Ukládání výsledků
         elapsed = time.time() - start_time
-        
-        # Logika pro formátování času (s, m, h)
-        if elapsed < 60:
-            duration_str = f"{int(elapsed)}s"
-        elif elapsed < 3600:
-            duration_str = f"{elapsed/60:.1f} m".replace('.', ',') # 5,6 m
-        else:
-            duration_str = f"{elapsed/3600:.1f} h".replace('.', ',') # 1,5 h
+        if elapsed < 60: duration_str = f"{int(elapsed)}s"
+        elif elapsed < 3600: duration_str = f"{elapsed/60:.1f} m".replace('.', ',')
+        else: duration_str = f"{elapsed/3600:.1f} h".replace('.', ',')
 
         final_ids_list = "SEZNAM ZPRACOVANÝCH ID\nDatum zpracování: {}\n------------------------------\n".format(datetime.now().strftime('%d.%m.%Y %H:%M'))
         final_ids_list += "\n".join([str(t['ticket_number']) for t in full_export_data])
@@ -332,13 +345,14 @@ def render_harvester():
             "tickets": len(full_export_data), 
             "activities": sum(len(t.get('activities', [])) for t in full_export_data), 
             "size": f"{len(json.dumps(full_export_data).encode('utf-8')) / 1024:.1f} KB",
-            "duration": duration_str  # <--- NOVÁ HODNOTA
+            "duration": duration_str,
+            "tokens": current_tokens,     # <--- NOVÉ
+            "cost": current_cost          # <--- NOVÉ
         }
         
         st.session_state.export_data = full_export_data
         st.session_state.id_list_txt = final_ids_list
         
-        # Generování CSV statistiky (pokud byla AI)
         if st.session_state.use_ai_analysis:
             st.session_state.csv_stats_bytes = generate_csv_stats_bytes(full_export_data)
         else:
@@ -359,24 +373,28 @@ def render_harvester():
 
         s = st.session_state.stats
         
-        # ZMĚNA: Vytvoříme 4 sloupce místo 3
-        c1, c2, c3, c4 = st.columns(4)
-        
-        c1.metric("Zpracováno ticketů", s["tickets"])
-        c2.metric("Nalezeno aktivit", s["activities"])
-        c3.metric("Velikost dat", s["size"])
-        
-        # ZMĚNA: Přidání čtvrté metriky (použije hodnotu vypočítanou ve Fázi 3)
-        # Používáme .get() pro jistotu, kdyby tam klíč náhodou nebyl
-        c4.metric("Doba trvání", s.get("duration", "N/A"))
-        
+        # Pokud byla použita AI, zobrazíme více sloupců
+        if st.session_state.use_ai_analysis:
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("Zpracováno ticketů", s["tickets"])
+            c2.metric("Nalezeno aktivit", s["activities"])
+            c3.metric("Doba trvání", s.get("duration", "N/A"))
+            # Sloučené zobrazení ceny a tokenů
+            c4.metric("Cena AI (odhad)", f"${s.get('cost', 0):.4f}")
+            c5.metric("Tokeny", f"{s.get('tokens', 0):,}".replace(",", " "))
+        else:
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Zpracováno ticketů", s["tickets"])
+            c2.metric("Nalezeno aktivit", s["activities"])
+            c3.metric("Velikost dat", s["size"])
+            c4.metric("Doba trvání", s.get("duration", "N/A"))
+
         st.write("")
         
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
         s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
         
-        # Tlačítka ke stažení
         json_data = json.dumps(st.session_state.export_data, ensure_ascii=False, indent=2)
         
         col_dl1, col_dl2 = st.columns(2)
@@ -385,7 +403,6 @@ def render_harvester():
         with col_dl2: 
             st.download_button(label="💾 STÁHNOUT SEZNAM TICKETŮ (TXT)", data=st.session_state.id_list_txt, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True)
         
-        # Tlačítko pro CSV statistiku (zobrazit jen pokud je dostupná)
         if st.session_state.csv_stats_bytes:
             st.write("")
             st.download_button(
@@ -419,7 +436,6 @@ def render_harvester():
         else:
             st.success(f"✅ Nalezeno **{count}** ticketů.")
             
-            # Příprava dat pro stažení seznamu ID (TXT)
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
             s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
@@ -440,21 +456,19 @@ def render_harvester():
                 # LEVÝ SLOUPEC: Limit (Počet)
                 with col_sett1:
                     st.markdown("**🔢 Počet ticketů**")
-                    # Checkbox pro "Všechny"
                     process_all = st.checkbox("⚡ Zpracovat vše", value=False, help="Stáhne úplně všechny nalezené tickety.")
                     
                     if process_all:
                         limit_val = 0 # Interně 0 znamená vše
                         st.info(f"Ke zpracování: **{count}** ticketů")
                     else:
-                        # Input, pokud není vybráno "Vše"
                         limit_val = st.number_input(
                             "Zadejte limit:", 
                             min_value=1, 
                             max_value=count, 
                             value=min(count, 50),
                             step=10,
-                            label_visibility="collapsed" # Skryje nadpis, aby to bylo hezčí
+                            label_visibility="collapsed"
                         )
 
                 # PRAVÝ SLOUPEC: AI (Inteligence)
@@ -469,10 +483,7 @@ def render_harvester():
                         st.caption("🚀 **Rychlé zpracování**")
                         st.caption("💨 Pouze stažení dat")
 
-            # -----------------------------------------------
-            
             st.write("")
-            # Tlačítko START
             if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True):
                 st.session_state.final_limit = limit_val
                 st.session_state.stop_requested = False
@@ -489,7 +500,6 @@ def render_harvester():
             with c_date1: d_from = st.date_input("Od", key="filter_date_from", format="DD.MM.YYYY")
             with c_date2: d_to = st.date_input("Do", key="filter_date_to", format="DD.MM.YYYY")
             
-            # ... tlačítka pro datum (beze změny) ...
             st.caption("Rychlý výběr období:")
             b_r1 = st.columns(3); b_r1[0].button("Tento rok", use_container_width=True, on_click=cb_this_year); b_r1[1].button("Minulý rok", use_container_width=True, on_click=cb_last_year); b_r1[2].button("Poslední půl rok", use_container_width=True, on_click=cb_last_half_year)
             b_r2 = st.columns(3); b_r2[0].button("Poslední 3 měsíce", use_container_width=True, on_click=cb_last_3_months); b_r2[1].button("Minulý měsíc", use_container_width=True, on_click=cb_last_month); b_r2[2].button("Tento měsíc", use_container_width=True, on_click=cb_this_month)
