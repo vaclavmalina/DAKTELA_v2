@@ -315,10 +315,26 @@ def render_harvester():
                 eta_text.caption(f"⏱️ Zbývá cca: {int(remaining_sec)} sekund")
 
         # Konec loopu - Ukládání výsledků
+        elapsed = time.time() - start_time
+        
+        # Logika pro formátování času (s, m, h)
+        if elapsed < 60:
+            duration_str = f"{int(elapsed)}s"
+        elif elapsed < 3600:
+            duration_str = f"{elapsed/60:.1f} m".replace('.', ',') # 5,6 m
+        else:
+            duration_str = f"{elapsed/3600:.1f} h".replace('.', ',') # 1,5 h
+
         final_ids_list = "SEZNAM ZPRACOVANÝCH ID\nDatum těžby: {}\n------------------------------\n".format(datetime.now().strftime('%d.%m.%Y %H:%M'))
         final_ids_list += "\n".join([str(t['ticket_number']) for t in full_export_data])
         
-        st.session_state.stats = {"tickets": len(full_export_data), "activities": sum(len(t.get('activities', [])) for t in full_export_data), "size": f"{len(json.dumps(full_export_data).encode('utf-8')) / 1024:.1f} KB"}
+        st.session_state.stats = {
+            "tickets": len(full_export_data), 
+            "activities": sum(len(t.get('activities', [])) for t in full_export_data), 
+            "size": f"{len(json.dumps(full_export_data).encode('utf-8')) / 1024:.1f} KB",
+            "duration": duration_str  # <--- NOVÁ HODNOTA
+        }
+        
         st.session_state.export_data = full_export_data
         st.session_state.id_list_txt = final_ids_list
         
