@@ -390,9 +390,25 @@ def render_harvester():
         else:
             st.success(f"✅ Nalezeno **{count}** ticketů.")
             
-            # Nastavení limitu
-            st.write("Kolik ticketů chcete hloubkově zpracovat?")
-            limit_val = st.number_input("Limit (0 = všechny)", min_value=0, max_value=count, value=min(count, 50))
+            # --- ÚPRAVA: Výběr limitu ---
+            st.write("Kolik ticketů chcete zpracovat?")
+            
+            # 1. Checkbox pro "Všechny"
+            process_all = st.checkbox("⚡ Zpracovat kompletně všechny nalezené tickety", value=False)
+            
+            if process_all:
+                limit_val = 0 # Logika kódu: 0 = všechny
+                st.info(f"Bude zpracováno celkem **{count}** ticketů.")
+            else:
+                # 2. Pokud není zaškrtnuto "Vše", zobrazíme input (začínáme na 1, aby to dávalo smysl)
+                limit_val = st.number_input(
+                    "Zadejte maximální počet:", 
+                    min_value=1, 
+                    max_value=count, 
+                    value=min(count, 50),
+                    step=10
+                )
+            # -----------------------------
 
             use_ai = st.checkbox("🧠 **Zapnout AI analýzu ticketů** (GPT-4o-mini)", value=False, help="Každý ticket bude odeslán do ChatGPT pro určení příčiny a návrh řešení. Proces bude trvat déle.")
             
