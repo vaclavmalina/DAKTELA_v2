@@ -21,7 +21,7 @@ except ImportError:
 PRICE_INPUT_1M = 0.15
 PRICE_OUTPUT_1M = 0.60
 
-# --- CALLBACKY (FUNKCE PRO TLAČÍTKA - beze změny) ---
+# --- CALLBACKY (FUNKCE PRO TLAČÍTKA) ---
 def set_date_range(d_from, d_to): st.session_state.filter_date_from = d_from; st.session_state.filter_date_to = d_to
 def cb_this_year(): set_date_range(date(date.today().year, 1, 1), date.today())
 def cb_last_year(): today = date.today(); last_year = today.year - 1; set_date_range(date(last_year, 1, 1), date(last_year, 12, 31))
@@ -80,6 +80,7 @@ def format_ticket_for_ai(ticket_entry):
 def generate_csv_stats_bytes(analyzed_data):
     """
     Vygeneruje CSV statistiku (Excel format) v paměti a vrátí bytes (UTF-8-SIG).
+    OPRAVA: lineterminator='\r\n' zajistí správné zobrazení v Excelu.
     """
     total = len(analyzed_data)
     if total == 0: return None
@@ -95,11 +96,8 @@ def generate_csv_stats_bytes(analyzed_data):
         if item.get("automation_suggestion"): stats[status]["automation"].append(item.get("automation_suggestion"))
         if item.get("minimization_suggestion"): stats[status]["minimization"].append(item.get("minimization_suggestion"))
 
-    # Vytvoření in-memory bufferu
     output = io.StringIO()
-    
-    # --- HLAVNÍ OPRAVA ZDE ---
-    # lineterminator='\r\n' zajistí, že Excel pozná, kde končí řádek
+    # Zde je klíčová oprava pro Excel: lineterminator='\r\n'
     writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL, lineterminator='\r\n')
     
     header = ['Nový Status', 'Počet', 'Podíl (%)', 'Typické problémy', 'Návrhy automatizace', 'Návrhy minimalizace']
@@ -111,7 +109,6 @@ def generate_csv_stats_bytes(analyzed_data):
         if not items: return ""
         unique = list(set(items))[:max_items]
         if not unique: return ""
-        # Vyčistíme text od enterů a středníků
         cleaned = [str(x).replace('\n', ' ').replace(';', ',').strip() for x in unique]
         return " | ".join(cleaned)
 
@@ -127,7 +124,6 @@ def generate_csv_stats_bytes(analyzed_data):
             format_safe_cell(data["minimization"], 5)
         ])
     
-    # Převedení na bytes s BOM pro Excel
     return output.getvalue().encode('utf-8-sig')
 
 
@@ -161,7 +157,6 @@ def render_harvester():
     if 'selected_cat_key' not in st.session_state: st.session_state.selected_cat_key = "ALL"
     if 'selected_stat_key' not in st.session_state: st.session_state.selected_stat_key = "ALL"
     
-    # Nové session states pro AI
     if 'use_ai_analysis' not in st.session_state: st.session_state.use_ai_analysis = False
     if 'csv_stats_bytes' not in st.session_state: st.session_state.csv_stats_bytes = None
     if 'ai_cost_total' not in st.session_state: st.session_state.ai_cost_total = 0.0
@@ -186,7 +181,7 @@ def render_harvester():
     # --- FÁZE 3: PROCESSING ---
     if st.session_state.harvester_phase == "processing":
         
-        # 1. UI Info panel (Datum, Kategorie, Stav AI)
+        # 1. UI Info panel
         with st.container(border=True):
             st.info(f"**Právě zpracovávám data pro:**\n\n"
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
@@ -196,20 +191,20 @@ def render_harvester():
         
         st.write(""); st.subheader("3. Probíhá zpracování dat..."); st.write("")
         
-        # Tlačítko pro zastavení (jediné tlačítko v této fázi)
+        # Tlačítko STOP (Jediné tlačítko zde)
         col_stop1, col_stop2, col_stop3 = st.columns([1, 2, 1])
         with col_stop2:
             if st.button("🛑 ZASTAVIT PROCES", use_container_width=True):
                 st.session_state.stop_requested = True; st.session_state.harvester_phase = "selection"; st.rerun()
 
-        # Placeholdery pro progress bar a texty (musí být definovány před smyčkou)
-        status_container = st.empty() # Pro AI connection status
+        # Placeholdery
+        status_container = st.empty() # Pro loading AI
         progress_bar = st.progress(0)
-        status_text = st.empty()      # "Zpracovávám ticket X/Y"
-        eta_text = st.empty()         # "Zbývá 30s"
-        token_text = st.empty()       # "Použité tokeny: 1500"
+        status_text = st.empty()
+        eta_text = st.empty()
+        token_text = st.empty()
 
-        # --- KROK 1: KONTROLA AI SPOJENÍ (běží jen jednou na začátku) ---
+        # --- KROK 1: KONTROLA AI SPOJENÍ ---
         client = None
         if st.session_state.use_ai_analysis:
             if not OPENAI_KEY:
@@ -219,15 +214,15 @@ def render_harvester():
                     st.rerun()
                 st.stop()
             
-            # Zobrazí se jako dočasný loading bar
+            # Loading stav (Status)
             with status_container.status("🤖 Navazuji spojení s OpenAI...", expanded=True) as status:
                 try:
                     time.sleep(0.5)
                     client = OpenAI(api_key=OPENAI_KEY)
-                    client.models.list() # Ping
+                    client.models.list() 
                     status.update(label="✅ Spojení s AI navázáno!", state="complete", expanded=False)
                     time.sleep(1)
-                    status_container.empty() # Po úspěchu zmizí, aby nezavazel
+                    status_container.empty() # Skrytí po úspěchu
                 except Exception as e:
                     status.update(label="❌ Chyba spojení s AI!", state="error")
                     st.error(f"Nepodařilo se spojit s ChatGPT API.\nDetail: {e}")
@@ -237,7 +232,7 @@ def render_harvester():
                         st.rerun()
                     st.stop()
 
-        # --- KROK 2: PŘÍPRAVA DAT ---
+        # --- KROK 2: INIT PROMĚNNÝCH ---
         combined_cut_regex = re.compile("|".join(CUT_OFF_PATTERNS + HISTORY_PATTERNS), re.IGNORECASE | re.MULTILINE)
         tickets_to_process = st.session_state.found_tickets
         if st.session_state.final_limit > 0: tickets_to_process = tickets_to_process[:st.session_state.final_limit]
@@ -250,14 +245,13 @@ def render_harvester():
             if st.session_state.stop_requested: break
             t_num = t_obj.get('name')
             
-            # Aktualizace textu o průběhu
+            # Aktualizace statusu
             status_msg = f"📥 Zpracovávám ticket **{idx + 1}/{total_count}**: `{t_num}`"
-            if st.session_state.use_ai_analysis:
-                status_msg += " + 🧠 AI Analýza"
+            if st.session_state.use_ai_analysis: status_msg += " + 🧠 AI Analýza"
             status_text.markdown(status_msg)
 
             try:
-                # 1. Stažení aktivit z Daktely
+                # 1. Daktela Data
                 acts = []
                 for attempt in range(3):
                     try:
@@ -267,7 +261,6 @@ def render_harvester():
                         break
                     except: time.sleep(1)
                 
-                # Zpracování ticketu (Parsing)
                 t_date, t_time = format_date_split(t_obj.get('created'))
                 t_status = t_obj.get('statuses', [{}])[0].get('title', 'N/A') if isinstance(t_obj.get('statuses'), list) and t_obj.get('statuses') else "N/A"
                 custom_fields = t_obj.get('customFields', {})
@@ -285,7 +278,7 @@ def render_harvester():
                     "activities": []
                 }
 
-                # 2. Čištění aktivit
+                # 2. Cleaning
                 for a_idx, act in enumerate(sorted(acts, key=lambda x: x.get('time', '')), 1):
                     item = act.get('item') or {}; address = item.get('address', '')
                     cleaned = clean_html(item.get('text') or act.get('description'))
@@ -305,7 +298,7 @@ def render_harvester():
                     act_data.update({"activity_creationDate": a_date, "activity_creationTime": a_time, "activity_text": cleaned})
                     ticket_entry["activities"].append(act_data)
                 
-                # 3. AI ANALÝZA (pokud je zapnuto)
+                # 3. AI Analysis
                 if st.session_state.use_ai_analysis and client:
                     try:
                         ai_input = format_ticket_for_ai(ticket_entry)
@@ -322,11 +315,9 @@ def render_harvester():
                         usage = response.usage
                         in_tokens = usage.prompt_tokens; out_tokens = usage.completion_tokens; total_t = usage.total_tokens
                         cost = (in_tokens / 1_000_000 * PRICE_INPUT_1M) + (out_tokens / 1_000_000 * PRICE_OUTPUT_1M)
-                        
                         current_cost += cost; current_tokens += total_t
                         
-                        # Zobrazujeme POUZE tokeny (cenu ne)
-                        token_text.caption(f"🪙 Použité tokeny: **{current_tokens}**")
+                        token_text.caption(f"🪙 Použité tokeny: **{current_tokens}**") # Pouze tokeny v průběhu
 
                         ai_result = json.loads(response.choices[0].message.content)
                         ticket_entry.update(ai_result)
@@ -337,7 +328,6 @@ def render_harvester():
 
             except Exception: pass
             
-            # Aktualizace progress baru a ETA
             progress_bar.progress((idx + 1) / total_count)
             elapsed = time.time() - start_time
             if idx > 0:
@@ -345,7 +335,7 @@ def render_harvester():
                 remaining_sec = (total_count - (idx + 1)) * avg_per_item
                 eta_text.caption(f"⏱️ Zbývá cca: **{int(remaining_sec)}** sekund")
 
-        # --- KONEC LOOPU: Výpočet finálních statistik ---
+        # --- KONEC LOOPU ---
         elapsed = time.time() - start_time
         if elapsed < 60: duration_str = f"{int(elapsed)}s"
         elif elapsed < 3600: duration_str = f"{elapsed/60:.1f} m".replace('.', ',')
@@ -366,7 +356,6 @@ def render_harvester():
         st.session_state.export_data = full_export_data
         st.session_state.id_list_txt = final_ids_list
         
-        # Generování CSV
         if st.session_state.use_ai_analysis:
             st.session_state.csv_stats_bytes = generate_csv_stats_bytes(full_export_data)
         else:
@@ -378,7 +367,6 @@ def render_harvester():
     elif st.session_state.harvester_phase == "results":
         st.success("🎉 Zpracování dokončeno!")
         
-        # Info panel
         info_text = f"**Použitý filtr:**\n\n" \
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n" \
                     f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n" \
@@ -388,13 +376,11 @@ def render_harvester():
 
         s = st.session_state.stats
         
-        # Pokud byla použita AI, zobrazíme více sloupců
         if st.session_state.use_ai_analysis:
             c1, c2, c3, c4, c5 = st.columns(5)
             c1.metric("Zpracováno ticketů", s["tickets"])
             c2.metric("Nalezeno aktivit", s["activities"])
             c3.metric("Doba trvání", s.get("duration", "N/A"))
-            # Sloučené zobrazení ceny a tokenů
             c4.metric("Cena AI (odhad)", f"${s.get('cost', 0):.4f}")
             c5.metric("Tokeny", f"{s.get('tokens', 0):,}".replace(",", " "))
         else:
@@ -462,19 +448,19 @@ def render_harvester():
             
             st.divider()
 
-            # --- NOVÝ OVLÁDACÍ PANEL (Sloupce vedle sebe) ---
+            # --- NOVÝ OVLÁDACÍ PANEL ---
             st.markdown("### ⚙️ Nastavení zpracování")
             
             with st.container(border=True):
                 col_sett1, col_sett2 = st.columns(2)
                 
-                # LEVÝ SLOUPEC: Limit (Počet)
+                # LEVÝ SLOUPEC: Limit
                 with col_sett1:
                     st.markdown("**🔢 Počet ticketů**")
                     process_all = st.checkbox("⚡ Zpracovat vše", value=False, help="Stáhne úplně všechny nalezené tickety.")
                     
                     if process_all:
-                        limit_val = 0 # Interně 0 znamená vše
+                        limit_val = 0
                         st.info(f"Ke zpracování: **{count}** ticketů")
                     else:
                         limit_val = st.number_input(
@@ -486,7 +472,7 @@ def render_harvester():
                             label_visibility="collapsed"
                         )
 
-                # PRAVÝ SLOUPEC: AI (Inteligence)
+                # PRAVÝ SLOUPEC: AI
                 with col_sett2:
                     st.markdown("**🧠 AI Analýza**")
                     use_ai = st.checkbox("Zapnout GPT-4o-mini", value=False, help="Odešle data do OpenAI pro analýzu.")
