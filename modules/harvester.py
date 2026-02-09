@@ -320,7 +320,7 @@ def render_harvester():
                         current_tokens += total_t
                         
                         # Aktualizace zobrazení ceny v průběhu
-                        cost_text.caption(f"💰 Odhad ceny: **${current_cost:.4f}** ({current_tokens} tokenů)")
+                        cost_text.caption(f"🪙 Použité tokeny: **${current_cost:.4f}** ({current_tokens} tokenů)")
 
                         ai_result = json.loads(response.choices[0].message.content)
                         ticket_entry.update(ai_result)
