@@ -1,5 +1,5 @@
 import streamlit as st
-from modules import dashboard, harvester
+from modules import harvester, main_menu
 
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
@@ -47,7 +47,7 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if 'current_app' not in st.session_state:
-    st.session_state.current_app = "dashboard"
+    st.session_state.current_app = "main_menu"
 
 # --- LOGIN OBRAZOVKA ---
 if not st.session_state.authenticated:
@@ -69,8 +69,8 @@ if not st.session_state.authenticated:
     st.stop()
 
 # --- APLIKACE (ROZCESTNÍK) ---
-if st.session_state.current_app == "dashboard":
-    dashboard.render_dashboard()
+if st.session_state.current_app == "main_menu":
+    main_menu.render_main_menu()
 
 elif st.session_state.current_app == "harvester":
     harvester.render_harvester()
