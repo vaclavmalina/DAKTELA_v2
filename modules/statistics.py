@@ -8,7 +8,7 @@ def render_statistics():
         <style>
             .block-container {
                 max-width: 95% !important;
-                padding-top: 5rem !important; /* Zvětšeno, aby nebyl useknutý vršek */
+                padding-top: 5rem !important;
                 padding-left: 1rem !important;
                 padding-right: 1rem !important;
                 padding-bottom: 1rem !important;
@@ -77,7 +77,7 @@ def render_statistics():
             # --- VÝPOČET KPI ---
             kpis = calculate_kpis(current_df)
             
-            # --- Vykreslení KPI karet (4 sloupce) + ALERTY PRO N/A ---
+            # --- Vykreslení KPI karet (4 sloupce) ---
             st.markdown("### 📈 Klíčové metriky")
             
             kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
@@ -112,12 +112,13 @@ def render_statistics():
             
             st.divider()
 
-            # --- Vykreslení Tabulky (Vždy Full Height/Width) ---
+            # --- Vykreslení Tabulky (Bez slideru) ---
             st.markdown(f"**Detailní data:** `{selected_file}`")
             
             # Výpočet výšky (nativní chování)
-            calculated_height = (len(current_df) + 1) * 35 + 3
-            table_height = min(calculated_height, 15000)
+            # Limit nastaven na 500 000 px (cca 14 000 řádků), aby zmizel slider
+            calculated_height = (len(current_df) + 1) * 36 + 3
+            table_height = min(calculated_height, 500000)
 
             st.data_editor(
                 current_df,
