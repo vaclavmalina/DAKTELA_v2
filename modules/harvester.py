@@ -184,7 +184,7 @@ def render_harvester():
         if st.session_state.use_ai_analysis:
             if not OPENAI_KEY:
                 st.error("❌ Chybí API klíč pro OpenAI v secrets.toml!")
-                if st.button("Vypnout AI a pokračovat jen s těžbou"):
+                if st.button("Vypnout AI a pokračovat jen se zpracováním dat"):
                     st.session_state.use_ai_analysis = False
                     st.rerun()
                 st.stop()
@@ -211,7 +211,7 @@ def render_harvester():
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
                     f"🧠 **AI Analýza:** {'Aktivní ✅ (GPT-4o-mini)' if st.session_state.use_ai_analysis else 'Neaktivní ❌'}")
         
-        st.write(""); st.subheader("3. Probíhá těžba dat..."); st.write("")
+        st.write(""); st.subheader("3. Probíhá zpracování dat..."); st.write("")
         
         col_stop1, col_stop2, col_stop3 = st.columns([1, 2, 1])
         with col_stop2:
@@ -325,7 +325,7 @@ def render_harvester():
         else:
             duration_str = f"{elapsed/3600:.1f} h".replace('.', ',') # 1,5 h
 
-        final_ids_list = "SEZNAM ZPRACOVANÝCH ID\nDatum těžby: {}\n------------------------------\n".format(datetime.now().strftime('%d.%m.%Y %H:%M'))
+        final_ids_list = "SEZNAM ZPRACOVANÝCH ID\nDatum zpracování: {}\n------------------------------\n".format(datetime.now().strftime('%d.%m.%Y %H:%M'))
         final_ids_list += "\n".join([str(t['ticket_number']) for t in full_export_data])
         
         st.session_state.stats = {
@@ -358,8 +358,18 @@ def render_harvester():
         st.info(info_text)
 
         s = st.session_state.stats
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Zpracováno ticketů", s["tickets"]); c2.metric("Nalezeno aktivit", s["activities"]); c3.metric("Velikost dat", s["size"])
+        
+        # ZMĚNA: Vytvoříme 4 sloupce místo 3
+        c1, c2, c3, c4 = st.columns(4)
+        
+        c1.metric("Zpracováno ticketů", s["tickets"])
+        c2.metric("Nalezeno aktivit", s["activities"])
+        c3.metric("Velikost dat", s["size"])
+        
+        # ZMĚNA: Přidání čtvrté metriky (použije hodnotu vypočítanou ve Fázi 3)
+        # Používáme .get() pro jistotu, kdyby tam klíč náhodou nebyl
+        c4.metric("Doba trvání", s.get("duration", "N/A"))
+        
         st.write("")
         
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -456,7 +466,7 @@ def render_harvester():
                         st.caption("⚠️ **Pomalé** (~3s/ticket)")
                         st.caption("💰 Čerpá kredity OpenAI")
                     else:
-                        st.caption("🚀 **Rychlá těžba**")
+                        st.caption("🚀 **Rychlé zpracování**")
                         st.caption("💨 Pouze stažení dat")
 
             # -----------------------------------------------
