@@ -435,7 +435,7 @@ def render_harvester():
                     
                     if process_all:
                         limit_val = 0 # Interně 0 znamená vše
-                        st.info(f"Ke zpracování: **{count}**ticketů")
+                        st.info(f"Ke zpracování: **{count}** ticketů")
                     else:
                         # Input, pokud není vybráno "Vše"
                         limit_val = st.number_input(
