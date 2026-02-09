@@ -384,42 +384,73 @@ def render_harvester():
         with col_x2:
             if st.button("❌ Zavřít výsledky a upravit zadání", use_container_width=True):
                 st.session_state.harvester_phase = "filter"; st.rerun()
+        
         st.subheader("2. Výsledek hledání")
         count = len(st.session_state.found_tickets)
-        if count == 0: st.warning("⚠️ V zadaném období a nastavení nebyly nalezeny žádné tickety.")
+        
+        if count == 0: 
+            st.warning("⚠️ V zadaném období a nastavení nebyly nalezeny žádné tickety.")
         else:
             st.success(f"✅ Nalezeno **{count}** ticketů.")
             
-            # --- ÚPRAVA: Výběr limitu ---
-            st.write("Kolik ticketů chcete zpracovat?")
+            # Příprava dat pro stažení seznamu ID (TXT)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
+            s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
+            found_ids = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
             
-            if process_all:
-                limit_val = 0 # Logika kódu: 0 = všechny
-                st.info(f"Bude zpracováno celkem **{count}** ticketů.")
-            else:
-                # 2. Pokud není zaškrtnuto "Vše", zobrazíme input (začínáme na 1, aby to dávalo smysl)
-                limit_val = st.number_input(
-                    "Zadejte maximální počet:", 
-                    min_value=1, 
-                    max_value=count, 
-                    value=min(count, 50),
-                    step=10
-                )
-
-            # 1. Checkbox pro "Všechny"
-            process_all = st.checkbox("⚡ Zpracovat kompletně všechny nalezené tickety", value=False)
-            # -----------------------------
-
-            use_ai = st.checkbox("🧠 **Zapnout AI analýzu ticketů** (GPT-4o-mini)", value=False, help="Každý ticket bude odeslán do ChatGPT pro určení příčiny a návrh řešení. Proces bude trvat déle.")
+            col_d1, col_d2, col_d3 = st.columns([1, 2, 1])
+            with col_d2: 
+                st.download_button(label="💾 STÁHNOUT SEZNAM TICKETŮ (TXT)", data=found_ids, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True)
             
-            if use_ai:
-                st.warning("⚠️ **Upozornění:** Zapnutá AI analýza prodlouží dobu zpracování (cca 2-4 sekundy na ticket) a čerpá kredity OpenAI.")
+            st.divider()
 
+            # --- NOVÝ OVLÁDACÍ PANEL (Sloupce vedle sebe) ---
+            st.markdown("### ⚙️ Nastavení zpracování")
+            
+            with st.container(border=True):
+                col_sett1, col_sett2 = st.columns(2)
+                
+                # LEVÝ SLOUPEC: Limit (Počet)
+                with col_sett1:
+                    st.markdown("**🔢 Počet ticketů**")
+                    # Checkbox pro "Všechny"
+                    process_all = st.checkbox("⚡ Zpracovat vše", value=False, help="Ignoruje limit a stáhne úplně všechny nalezené tickety.")
+                    
+                    if process_all:
+                        limit_val = 0 # Interně 0 znamená vše
+                        st.info(f"Ke zpracování: **{count}** ks")
+                    else:
+                        # Input, pokud není vybráno "Vše"
+                        limit_val = st.number_input(
+                            "Zadejte limit:", 
+                            min_value=1, 
+                            max_value=count, 
+                            value=min(count, 50),
+                            step=10,
+                            label_visibility="collapsed" # Skryje nadpis, aby to bylo hezčí
+                        )
+
+                # PRAVÝ SLOUPEC: AI (Inteligence)
+                with col_sett2:
+                    st.markdown("**🧠 AI Analýza**")
+                    use_ai = st.checkbox("Zapnout GPT-4o-mini", value=False, help="Odešle data do OpenAI pro analýzu příčiny.")
+                    
+                    if use_ai:
+                        st.caption("⚠️ **Pomalé** (~3s/ticket)")
+                        st.caption("💰 Čerpá kredity OpenAI")
+                    else:
+                        st.caption("🚀 **Rychlá těžba**")
+                        st.caption("💨 Pouze stažení dat")
+
+            # -----------------------------------------------
+            
             st.write("")
+            # Tlačítko START
             if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True):
                 st.session_state.final_limit = limit_val
                 st.session_state.stop_requested = False
-                st.session_state.use_ai_analysis = use_ai # Uložíme volbu uživatele
+                st.session_state.use_ai_analysis = use_ai 
                 st.session_state.harvester_phase = "processing"
                 st.rerun()
 
