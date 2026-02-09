@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-# ZMĚNA: Importujeme naše pomocné funkce z vedlejšího souboru
 from modules.statistics_logic import calculate_kpis
 
 def render_statistics():
@@ -49,7 +48,6 @@ def render_statistics():
         
         st.divider()
         
-        # Ovládací panel + Tlačítko smazat
         col_select, col_actions = st.columns([3, 1], vertical_alignment="bottom")
         
         with col_select:
@@ -64,12 +62,14 @@ def render_statistics():
         if selected_file in st.session_state.uploaded_data:
             current_df = st.session_state.uploaded_data[selected_file]
             
-            # --- POUŽITÍ EXTERNÍ LOGIKY ---
+            # --- VÝPOČET KPI ---
             kpis = calculate_kpis(current_df)
             
-            # --- Vykreslení KPI karet ---
+            # --- Vykreslení KPI karet (4 sloupce) ---
             st.markdown("### 📈 Klíčové metriky")
-            kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+            
+            # Definujeme 4 sloupce
+            kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
             
             with kpi_col1:
                 st.metric(label="Počet řádků", value=kpis["row_count"])
@@ -80,7 +80,11 @@ def render_statistics():
 
             with kpi_col3:
                 val = kpis["avg_response_time"]
-                st.metric(label="Prům. doba 1. odpovědi", value=val if val is not None else "N/A")
+                st.metric(label="Prům. doba 1. odp.", value=val if val is not None else "N/A", help="Doba první odpovědi")
+
+            with kpi_col4:
+                val = kpis["avg_client_reaction"]
+                st.metric(label="Prům. reakce klienta", value=val if val is not None else "N/A", help="Čas reakce klienta na zprávu operátora (pokud reagoval později).")
             
             st.divider()
 
@@ -100,7 +104,6 @@ def render_statistics():
                         }
                     </style>
                 """, unsafe_allow_html=True)
-                # Výpočet výšky
                 calculated_height = (len(current_df) + 1) * 35 + 3
                 table_height = min(calculated_height, 15000)
             else:
