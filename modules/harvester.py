@@ -190,6 +190,8 @@ def render_harvester():
         with st.container(border=True):
             st.info(f"**Právě zpracovávám data pro:**\n\n"
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
+                    f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n"
+                    f"🏷️ **Status:** {next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), 'VŠE')}\n\n"
                     f"🧠 **AI Analýza:** {'Aktivní ✅ (GPT-4o-mini)' if st.session_state.use_ai_analysis else 'Neaktivní ❌'}")
         
         st.write(""); st.subheader("3. Probíhá zpracování dat..."); st.write("")
@@ -380,6 +382,7 @@ def render_harvester():
         info_text = f"**Použitý filtr:**\n\n" \
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n" \
                     f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n" \
+                    f"🏷️ **Status:** {next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), 'VŠE')}\n\n" \
                     f"🧠 **AI Analýza:** {'Aktivní ✅' if st.session_state.use_ai_analysis else 'Neaktivní ❌'}"
         st.info(info_text)
 
