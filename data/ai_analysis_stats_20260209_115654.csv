@@ -1,0 +1,22 @@
+﻿"Nový Status";"Počet";"Podíl (%)";"Typické problémy (ukázky)";"Návrhy automatizace";"Návrhy minimalizace"
+"Chyba klient";"4";"36,4";"• Chybějící rozměry balíku pro dopravce Foxpost.
+• Duplicitní číslo zásilky kvůli neaktualizaci štítku klientem.
+• Chybějící parametr ins_currency v requestu
+• Nesprávná kategorie zásilky pro službu RR.";"• Implementovat automatickou validaci vstupních dat, která zkontroluje přítomnost všech povinných parametrů před odesláním requestu.
+• Implementovat automatickou kontrolu a upozornění na nesprávně zvolené kategorie zásilek při generování štítků.
+• Implementovat automatizovanou kontrolu a upozornění pro klienty při pokusu o použití již použitého čísla zásilky.
+• Implementovat automatickou validaci a upozornění pro klienty, pokud chybí rozměry balíku při vytváření štítku.";"• Přidat tooltipy nebo upozornění v dokumentaci pro klienty, aby nezapomněli na povinné parametry jako je ins_currency.
+• Zlepšit dokumentaci a přidat validaci na vstupu pro výběr kategorie zásilky v aplikaci Balíkobot.
+• Zajistit, aby byla dokumentace jasně uvedena, že rozměry balíku jsou povinné pro určité dopravce, a přidat tooltipy v aplikaci pro lepší informovanost uživatelů.
+• Zlepšit dokumentaci a školení pro klienty ohledně správného používání číselných řad a štítků."
+"Změny/úpravy";"2";"18,2";"• Změna formátu štítků pro DHL DE.
+• Chybná konfigurace přejímání štítků u Zásilkovny";"• Implementovat automatizovaný systém, který detekuje a upozorňuje na konflikty v nastavení přejímání štítků.
+• Automatizovat notifikaci klienta o změnách formátu štítků při napojení na nové dopravce.";"• Zlepšit dokumentaci a přidat validaci nastavení přejímání štítků, aby se předešlo podobným chybám v budoucnu.
+• Zahrnout informace o formátech štítků do dokumentace pro nové klienty a dopravce."
+"Žádosti o data";"2";"18,2";"• Nový rozsah podacích čísel pro klienta.
+• Žádost o odeslání dat k zásilkám.";"• Automatizovat proces potvrzení přijetí rozsahu podacích čísel a jejich nastavení do systému klienta.
+• Implementovat automatizovaný systém pro pravidelné odesílání dat klientům na základě jejich požadavků.";"• Zavést standardizovaný formulář pro žádosti o data, který by klienti vyplnili při žádosti o nové rozsahy podacích čísel.
+• Vytvořit FAQ sekci s informacemi o tom, jak a kdy mohou klienti očekávat odeslání dat."
+"Nerelevantní";"1";"9,1";"• Žádné informace k analýze.";"• Automaticky zavřít tickety bez aktivit po určitém čase.";"• Zavést pravidlo pro uživatele, aby před odesláním ticketu vyplnili minimální informace."
+"Problém - dopravce";"1";"9,1";"• API PPL je uzamčeno, nutná komunikace s dopravcem.";"• Implementovat automatizované upozornění pro klienty, pokud dojde k uzamčení API dopravce.";"• Zajistit, aby klienti byli informováni o nutnosti uhradit pohledávky vůči dopravcům před aktivací napojení."
+"Problém - Balíkobot";"1";"9,1";"• Nedostatečná validace dat při CHECK oproti ADD.";"• Implementovat pokročilejší validaci dat při metodě CHECK, která by zahrnovala více kontrol jako u metody ADD.";"• Zlepšit dokumentaci a informovat klienty o rozdílech mezi metodami CHECK a ADD, aby se předešlo nedorozuměním."

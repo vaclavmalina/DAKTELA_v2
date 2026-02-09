@@ -1,0 +1,124 @@
+{
+  "metadata": {
+    "analysis_date": "2026-02-09T11:57:20.364225",
+    "model_used": "gpt-4o-mini",
+    "input_file": "data\\data_technicka_VSE_20260206_094050.json"
+  },
+  "summary": {
+    "total_tickets_processed": 11,
+    "total_time_seconds": 24.98,
+    "average_time_per_ticket": 2.27
+  },
+  "tickets": [
+    {
+      "ticket_number": 894164,
+      "original_status": "Problém - Balíkobot",
+      "new_status": "Chyba klient",
+      "reason": "Problém je způsoben nesprávně zvolenou kategorií zásilek, což je chyba na straně klienta. Klient musí použít správnou službu pro zasílání zboží.",
+      "problem_summary": "Nesprávná kategorie zásilky pro službu RR.",
+      "automation_suggestion": "Implementovat automatickou kontrolu a upozornění na nesprávně zvolené kategorie zásilek při generování štítků.",
+      "minimization_suggestion": "Zlepšit dokumentaci a přidat validaci na vstupu pro výběr kategorie zásilky v aplikaci Balíkobot.",
+      "analysis_time_seconds": 2.94
+    },
+    {
+      "ticket_number": 894145,
+      "original_status": "Funkcionalita",
+      "new_status": "Změny/úpravy",
+      "reason": "Ticket se týká změny formátu štítků pro nového dopravce, což spadá do kategorie změn konfigurace. Je potřeba informovat klienta o těchto změnách.",
+      "problem_summary": "Změna formátu štítků pro DHL DE.",
+      "automation_suggestion": "Automatizovat notifikaci klienta o změnách formátu štítků při napojení na nové dopravce.",
+      "minimization_suggestion": "Zahrnout informace o formátech štítků do dokumentace pro nové klienty a dopravce.",
+      "analysis_time_seconds": 2.17
+    },
+    {
+      "ticket_number": 894128,
+      "original_status": "Chyba klient",
+      "new_status": "Chyba klient",
+      "reason": "Klient měl chybná data v requestu, konkrétně chybějící parametr ins_currency. Po opravě problém vyřešil.",
+      "problem_summary": "Chybějící parametr ins_currency v requestu",
+      "automation_suggestion": "Implementovat automatickou validaci vstupních dat, která zkontroluje přítomnost všech povinných parametrů před odesláním requestu.",
+      "minimization_suggestion": "Přidat tooltipy nebo upozornění v dokumentaci pro klienty, aby nezapomněli na povinné parametry jako je ins_currency.",
+      "analysis_time_seconds": 2.1
+    },
+    {
+      "ticket_number": 894054,
+      "original_status": "N/A",
+      "new_status": "Nerelevantní",
+      "reason": "Ticket neobsahuje žádné aktivity, což znamená, že není možné určit problém nebo požadavek.",
+      "problem_summary": "Žádné informace k analýze.",
+      "automation_suggestion": "Automaticky zavřít tickety bez aktivit po určitém čase.",
+      "minimization_suggestion": "Zavést pravidlo pro uživatele, aby před odesláním ticketu vyplnili minimální informace.",
+      "analysis_time_seconds": 1.85
+    },
+    {
+      "ticket_number": 894040,
+      "original_status": "Chyba klient",
+      "new_status": "Problém - dopravce",
+      "reason": "Chyba je způsobena uzamčením API ze strany dopravce PPL, nikoli chybou klienta. Klient by měl kontaktovat PPL pro vyřešení problému.",
+      "problem_summary": "API PPL je uzamčeno, nutná komunikace s dopravcem.",
+      "automation_suggestion": "Implementovat automatizované upozornění pro klienty, pokud dojde k uzamčení API dopravce.",
+      "minimization_suggestion": "Zajistit, aby klienti byli informováni o nutnosti uhradit pohledávky vůči dopravcům před aktivací napojení.",
+      "analysis_time_seconds": 2.05
+    },
+    {
+      "ticket_number": 894014,
+      "original_status": "Problém - systém",
+      "new_status": "Chyba klient",
+      "reason": "Problém je způsoben chybějícími rozměry balíku, které jsou vyžadovány dopravcem Foxpost. Klient musí zajistit, aby rozměry byly správně nastaveny v systému Shoptet nebo v Balíkobotu.",
+      "problem_summary": "Chybějící rozměry balíku pro dopravce Foxpost.",
+      "automation_suggestion": "Implementovat automatickou validaci a upozornění pro klienty, pokud chybí rozměry balíku při vytváření štítku.",
+      "minimization_suggestion": "Zajistit, aby byla dokumentace jasně uvedena, že rozměry balíku jsou povinné pro určité dopravce, a přidat tooltipy v aplikaci pro lepší informovanost uživatelů.",
+      "analysis_time_seconds": 2.46
+    },
+    {
+      "ticket_number": 893968,
+      "original_status": "Změny/úpravy",
+      "new_status": "Žádosti o data",
+      "reason": "Klient žádá o odeslání dat k zásilkám, což spadá do kategorie žádostí o data. Původní status 'Změny/úpravy' není relevantní pro tuto situaci.",
+      "problem_summary": "Žádost o odeslání dat k zásilkám.",
+      "automation_suggestion": "Implementovat automatizovaný systém pro pravidelné odesílání dat klientům na základě jejich požadavků.",
+      "minimization_suggestion": "Vytvořit FAQ sekci s informacemi o tom, jak a kdy mohou klienti očekávat odeslání dat.",
+      "analysis_time_seconds": 2.13
+    },
+    {
+      "ticket_number": 893909,
+      "original_status": "Změny/úpravy",
+      "new_status": "Chyba klient",
+      "reason": "Problém s duplicitním číslem zásilky je způsoben chybou na straně klienta, který neaktualizoval štítek po jeho odstranění. Klient byl informován o nutnosti přepojení na nové API, což by mělo problém vyřešit.",
+      "problem_summary": "Duplicitní číslo zásilky kvůli neaktualizaci štítku klientem.",
+      "automation_suggestion": "Implementovat automatizovanou kontrolu a upozornění pro klienty při pokusu o použití již použitého čísla zásilky.",
+      "minimization_suggestion": "Zlepšit dokumentaci a školení pro klienty ohledně správného používání číselných řad a štítků.",
+      "analysis_time_seconds": 2.36
+    },
+    {
+      "ticket_number": 893864,
+      "original_status": "Funkcionalita",
+      "new_status": "Problém - Balíkobot",
+      "reason": "Klient upozorňuje na nedostatečné kontroly při metodě CHECK, což může vést k problémům při následném ADD. Chybějící validace může způsobit neúspěšné odeslání dat a zmatek v procesech.",
+      "problem_summary": "Nedostatečná validace dat při CHECK oproti ADD.",
+      "automation_suggestion": "Implementovat pokročilejší validaci dat při metodě CHECK, která by zahrnovala více kontrol jako u metody ADD.",
+      "minimization_suggestion": "Zlepšit dokumentaci a informovat klienty o rozdílech mezi metodami CHECK a ADD, aby se předešlo nedorozuměním.",
+      "analysis_time_seconds": 2.04
+    },
+    {
+      "ticket_number": 893859,
+      "original_status": "Chyba klient",
+      "new_status": "Změny/úpravy",
+      "reason": "Problém byl vyřešen vypnutím přejímání štítků, což naznačuje potřebu úpravy konfigurace. Klient měl chybu v nastavení, která byla dočasně opravena.",
+      "problem_summary": "Chybná konfigurace přejímání štítků u Zásilkovny",
+      "automation_suggestion": "Implementovat automatizovaný systém, který detekuje a upozorňuje na konflikty v nastavení přejímání štítků.",
+      "minimization_suggestion": "Zlepšit dokumentaci a přidat validaci nastavení přejímání štítků, aby se předešlo podobným chybám v budoucnu.",
+      "analysis_time_seconds": 2.53
+    },
+    {
+      "ticket_number": 893851,
+      "original_status": "Aktivace",
+      "new_status": "Žádosti o data",
+      "reason": "Ticket se týká přijetí nového rozsahu podacích čísel od dopravce pro klienta. Původní status 'Aktivace' není adekvátní, protože se jedná o žádost o data.",
+      "problem_summary": "Nový rozsah podacích čísel pro klienta.",
+      "automation_suggestion": "Automatizovat proces potvrzení přijetí rozsahu podacích čísel a jejich nastavení do systému klienta.",
+      "minimization_suggestion": "Zavést standardizovaný formulář pro žádosti o data, který by klienti vyplnili při žádosti o nové rozsahy podacích čísel.",
+      "analysis_time_seconds": 2.35
+    }
+  ]
+}
