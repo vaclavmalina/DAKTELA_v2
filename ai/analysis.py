@@ -99,7 +99,8 @@ def generate_stats_csv(analyzed_data):
 
         # Používáme utf-8-sig pro správné zobrazení češtiny v Excelu
         with open(CSV_OUTPUT, 'w', newline='', encoding='utf-8-sig') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL)
+    # Zde přidejte lineterminator='\r\n'
+    writer = csv.writer(csvfile, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL, lineterminator='\r\n')
             
             header = [
                 'Nový Status', 

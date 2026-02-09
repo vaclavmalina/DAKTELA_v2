@@ -89,14 +89,19 @@ def generate_csv_stats_bytes(analyzed_data):
     })
 
     for item in analyzed_data:
+        # AI data jsou nyní sloučena přímo v položce ticketu
         status = item.get("new_status", "Nezpracováno")
         stats[status]["count"] += 1
-        if item.get("problem_summary"): stats[status]["problems"].append(item["problem_summary"])
-        if item.get("automation_suggestion"): stats[status]["automation"].append(item["automation_suggestion"])
-        if item.get("minimization_suggestion"): stats[status]["minimization"].append(item["minimization_suggestion"])
+        if item.get("problem_summary"): stats[status]["problems"].append(item.get("problem_summary"))
+        if item.get("automation_suggestion"): stats[status]["automation"].append(item.get("automation_suggestion"))
+        if item.get("minimization_suggestion"): stats[status]["minimization"].append(item.get("minimization_suggestion"))
 
+    # Vytvoření in-memory bufferu
     output = io.StringIO()
-    writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL)
+    
+    # ZMĚNA ZDE: Přidán parametr lineterminator='\r\n'
+    # To zajistí, že Excel správně pozná konec řádku i když to běží na Linux serveru
+    writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL, lineterminator='\r\n')
     
     header = ['Nový Status', 'Počet', 'Podíl (%)', 'Typické problémy', 'Návrhy automatizace', 'Návrhy minimalizace']
     writer.writerow(header)
@@ -104,9 +109,12 @@ def generate_csv_stats_bytes(analyzed_data):
     sorted_stats = sorted(stats.items(), key=lambda x: x[1]['count'], reverse=True)
 
     def format_safe_cell(items, max_items=10):
+        # Ošetření, aby items nebyl None
+        if not items: return ""
         unique = list(set(items))[:max_items]
         if not unique: return ""
-        cleaned = [x.replace('\n', ' ').replace(';', ',').strip() for x in unique]
+        # Vyčistíme text od enterů a středníků
+        cleaned = [str(x).replace('\n', ' ').replace(';', ',').strip() for x in unique]
         return " | ".join(cleaned)
 
     for status, data in sorted_stats:
@@ -121,6 +129,7 @@ def generate_csv_stats_bytes(analyzed_data):
             format_safe_cell(data["minimization"], 5)
         ])
     
+    # Převedení na bytes s BOM pro Excel
     return output.getvalue().encode('utf-8-sig')
 
 
