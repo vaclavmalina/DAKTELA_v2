@@ -138,7 +138,7 @@ def render_harvester():
     col_back, col_title, col_void = st.columns([1, 4, 1])
     with col_back:
         if st.button("⬅️ Menu", key="menu_btn"):
-            st.session_state.current_app = "dashboard"
+            st.session_state.current_app = "main_menu"
             st.session_state.harvester_phase = "filter"
             st.rerun()
     with col_title:

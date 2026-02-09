@@ -3,7 +3,7 @@ import streamlit as st
 def show_wip_msg(module_name):
     st.toast(f"🚧 Modul **{module_name}** je momentálně ve vývoji.", icon="🛠️")
 
-def render_dashboard():
+def render_main_menu():
     st.markdown("<h1 style='text-align: center; margin-bottom: 75px;'>🗂️ Balíkobot Data Centrum</h1>", unsafe_allow_html=True)
 
     menu_items = [
