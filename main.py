@@ -3,7 +3,7 @@ from modules import harvester, main_menu, statistics
 
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
-    page_title="Balíkobot Data Centrum",
+    page_title="Balíkobot - Datio",
     layout="centered",
     initial_sidebar_state="collapsed",
     page_icon="🧊"

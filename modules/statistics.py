@@ -19,6 +19,10 @@ def render_statistics():
     # --- Inicializace Session State ---
     if 'uploaded_data' not in st.session_state:
         st.session_state.uploaded_data = {}
+    
+    # ZMĚNA: Inicializace klíče pro resetování uploaderu
+    if 'uploader_key' not in st.session_state:
+        st.session_state.uploader_key = 0
 
     # --- Header ---
     col_back, col_title, col_void = st.columns([1, 4, 1])
@@ -28,16 +32,18 @@ def render_statistics():
             st.rerun()
             
     with col_title:
-        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>📊 Statistiky a Data</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>📊 Statistiky a data</h2>", unsafe_allow_html=True)
     st.divider()
 
     # --- Sekce pro nahrání souborů ---
     st.markdown("### 📤 Správa dat")
     
+    # ZMĚNA: Přidán dynamický klíč 'key=f"uploader_{...}"', který zajistí vyprázdnění komponenty při smazání
     uploaded_files = st.file_uploader(
         "📂 Klikněte pro výběr souborů nebo je přetáhněte sem (CSV, Excel)", 
         type=['csv', 'xlsx', 'xls'], 
-        accept_multiple_files=True
+        accept_multiple_files=True,
+        key=f"uploader_{st.session_state.uploader_key}"
     )
 
     if uploaded_files:
@@ -69,6 +75,8 @@ def render_statistics():
         with col_actions:
             if st.button("🗑️ Smazat vše", use_container_width=True):
                 st.session_state.uploaded_data = {}
+                # ZMĚNA: Inkrementace klíče donutí file_uploader k resetu (zahození cache souborů)
+                st.session_state.uploader_key += 1
                 st.rerun()
 
         if selected_file in st.session_state.uploaded_data:
@@ -115,10 +123,11 @@ def render_statistics():
             # --- Vykreslení Tabulky (Bez slideru) ---
             st.markdown(f"**Detailní data:** `{selected_file}`")
             
-            # Výpočet výšky (nativní chování)
-            # Limit nastaven na 500 000 px (cca 14 000 řádků), aby zmizel slider
-            calculated_height = (len(current_df) + 1) * 36 + 3
-            table_height = min(calculated_height, 500000)
+            # ZMĚNA: Omezení maximální výšky na 800px. 
+            # Příliš vysoké hodnoty (50000) způsobují chyby vykreslování (tabulka zmizí).
+            # Nyní se zobrazí scrollbar uvnitř tabulky, pokud je dat hodně.
+            calculated_height = (len(current_df) + 1) * 35 + 3
+            table_height = min(calculated_height, 800)
 
             st.data_editor(
                 current_df,
