@@ -1,5 +1,7 @@
 import streamlit as st
-from modules import harvester, main_menu, statistics
+from main_menu import render_main_menu
+from harvester import render_harvester
+from db_update import render_db_update
 
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
