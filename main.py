@@ -1,7 +1,18 @@
 import streamlit as st
+
+# --- IMPORTY MODULŮ ---
 from main_menu import render_main_menu
 from harvester import render_harvester
 from db_update import render_db_update
+
+# Zde předpokládám, že soubor se jmenuje 'statistics.py' a funkce 'render_statistics'
+# Pokud se soubor jmenuje jinak (např. stats.py), uprav tento řádek.
+try:
+    from statistics import render_statistics
+except ImportError:
+    # Fallback, kdyby soubor neexistoval, aby aplikace nespadla celá
+    def render_statistics():
+        st.error("Chyba: Soubor 'statistics.py' nebyl nalezen.")
 
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
@@ -63,6 +74,7 @@ if not st.session_state.authenticated:
             submitted = st.form_submit_button("Přihlásit se", use_container_width=True)
 
     if submitted:
+        # Pozor: Ujisti se, že máš 'APP_PASSWORD' v .streamlit/secrets.toml
         if password_input == st.secrets["APP_PASSWORD"]:
             st.session_state.authenticated = True
             st.rerun()
@@ -71,12 +83,15 @@ if not st.session_state.authenticated:
     st.stop()
 
 # --- APLIKACE (ROZCESTNÍK) ---
+# Tady se rozhoduje, která "obrazovka" se vykreslí
 if st.session_state.current_app == "main_menu":
     render_main_menu()
+
 elif st.session_state.current_app == "harvester":
     render_harvester()
+
 elif st.session_state.current_app == "statistics":
     render_statistics()
+
 elif st.session_state.current_app == "db_update":
     render_db_update()
-
