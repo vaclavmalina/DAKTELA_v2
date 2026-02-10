@@ -4,15 +4,16 @@ def show_wip_msg(module_name):
     st.toast(f"🚧 Modul **{module_name}** je momentálně ve vývoji.", icon="🛠️")
 
 def render_main_menu():
-    st.markdown("<h1 style='text-align: center; margin-bottom: 75px;'>Balíkobot - Datio", unsafe_allow_html=True)
+    # OPRAVA: Doplněno uzavření </h1> a uvozovky
+    st.markdown("<h1 style='text-align: center; margin-bottom: 75px;'>Balíkobot - Datio</h1>", unsafe_allow_html=True)
 
     menu_items = [
         {"label": "🔎\nAnalýza ticketů", "action": "harvester"},
         {"label": "📊\nStatistiky",      "action": "Statistiky"},
+        {"label": "🔄\nStažení dat",    "action": "Stažení dat"}, # Přesunul jsem to výš, když je to hotové
         {"label": "📈\nDashboard",       "action": "Dashboard"},
         {"label": "📑\nReporting",       "action": "Reporting"},
         {"label": "👥\nUživatelé",       "action": "Uživatelé"},
-        {"label": "🔄\nStažení dat",    "action": "Stažení dat"},
         {"label": "🗄️\nArchiv",          "action": "Archiv"},
         {"label": "⚙️\nNastavení",       "action": "Nastavení"},
         {"label": "❓\nNápověda",        "action": "Nápověda"},
@@ -25,22 +26,22 @@ def render_main_menu():
             with cols[idx]:
                 if st.button(item["label"], use_container_width=True):
                     
-                    # Logika pro Harvester
+                    # 1. HARVESTER (Hotovo)
                     if item["action"] == "harvester":
                         st.session_state.current_app = "harvester"
                         st.rerun()
                     
-                    # ZMĚNA: Přidána logika pro Statistiky
+                    # 2. STATISTIKY (Hotovo)
                     elif item["action"] == "Statistiky":
                         st.session_state.current_app = "statistics"
                         st.rerun()
 
-                    # ZMĚNA: Přidána logika pro Stažení dat
+                    # 3. STAŽENÍ DAT (Hotovo)
                     elif item["action"] == "Stažení dat":
                         st.session_state.current_app = "db_update"
                         st.rerun()
                         
-                    # Ostatní tlačítka (WIP)
+                    # OSTATNÍ (WIP)
                     else:
                         show_wip_msg(item["action"])
         st.write("")

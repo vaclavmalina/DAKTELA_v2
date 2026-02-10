@@ -70,11 +70,11 @@ if not st.session_state.authenticated:
 
 # --- APLIKACE (ROZCESTNÍK) ---
 if st.session_state.current_app == "main_menu":
-    main_menu.render_main_menu()
-
+    render_main_menu()
 elif st.session_state.current_app == "harvester":
-    harvester.render_harvester()
-
+    render_harvester()
 elif st.session_state.current_app == "statistics":
-    statistics.render_statistics()
+    render_statistics()
+elif st.session_state.current_app == "db_update":
+    render_db_update()
 
