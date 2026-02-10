@@ -1,13 +1,7 @@
-# Ignorovat složku s daty
 data/
-*.json
-*.csv
-*.txt
 
-# Ignorovat citlivé údaje (API klíče) !!!
 .streamlit/secrets.toml
 .env
 
-# Ignorovat systémové soubory Pythonu
 __pycache__/
 *.pyc
