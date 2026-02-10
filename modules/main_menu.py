@@ -12,7 +12,7 @@ def render_main_menu():
         {"label": "📈\nDashboard",       "action": "Dashboard"},
         {"label": "📑\nReporting",       "action": "Reporting"},
         {"label": "👥\nUživatelé",       "action": "Uživatelé"},
-        {"label": "🔄\nAutomatizace",    "action": "Automatizace"},
+        {"label": "🔄\nStažení dat",    "action": "Stažení dat"},
         {"label": "🗄️\nArchiv",          "action": "Archiv"},
         {"label": "⚙️\nNastavení",       "action": "Nastavení"},
         {"label": "❓\nNápověda",        "action": "Nápověda"},
@@ -33,6 +33,11 @@ def render_main_menu():
                     # ZMĚNA: Přidána logika pro Statistiky
                     elif item["action"] == "Statistiky":
                         st.session_state.current_app = "statistics"
+                        st.rerun()
+
+                    # ZMĚNA: Přidána logika pro Stažení dat
+                    elif item["action"] == "Stažení dat":
+                        st.session_state.current_app = "db_update"
                         st.rerun()
                         
                     # Ostatní tlačítka (WIP)
