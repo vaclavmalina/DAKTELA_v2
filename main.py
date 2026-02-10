@@ -1,18 +1,16 @@
 import streamlit as st
 
-# --- IMPORTY MODULŮ ---
-from main_menu import render_main_menu
-from harvester import render_harvester
-from db_update import render_db_update
-
-# Zde předpokládám, že soubor se jmenuje 'statistics.py' a funkce 'render_statistics'
-# Pokud se soubor jmenuje jinak (např. stats.py), uprav tento řádek.
+# --- IMPORTY MODULŮ ZE SLOŽKY "modules" ---
+# Pythonu říkáme: jdi do složky 'modules', najdi soubor 'nazev' a importuj funkci 'render...'
 try:
-    from statistics import render_statistics
-except ImportError:
-    # Fallback, kdyby soubor neexistoval, aby aplikace nespadla celá
-    def render_statistics():
-        st.error("Chyba: Soubor 'statistics.py' nebyl nalezen.")
+    from modules.main_menu import render_main_menu
+    from modules.harvester import render_harvester
+    from modules.db_update import render_db_update
+    from modules.statistics import render_statistics
+except ImportError as e:
+    st.error(f"Chyba importu: {e}")
+    st.info("Ujistěte se, že ve složce 'modules' existují soubory: main_menu.py, harvester.py, db_update.py, statistics.py")
+    st.stop()
 
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
