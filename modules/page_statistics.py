@@ -21,6 +21,28 @@ CARRIER_MAPPING = {
     'cp': 'Česká pošta'
 }
 
+# --- CALLBACK PRO RESET ---
+def reset_filters_callback():
+    """
+    Callback funkce, která se zavolá PŘED přenačtením stránky.
+    Maže stav slideru a filtrů, ale ZACHOVÁVÁ výběr grafu.
+    """
+    keys_to_delete = []
+    for key in st.session_state.keys():
+        # 1. Smazat slider (tím se vynutí návrat na min/max hodnoty)
+        if key == "slider_main_date":
+            keys_to_delete.append(key)
+        
+        # 2. Smazat filtry v sidebaru a togly
+        if key.startswith(("filter_", "stat_", "tg_")):
+            keys_to_delete.append(key)
+        
+        # 3. DŮLEŽITÉ: Klíč "graph_carrier_select" NEMAŽEME.
+        # Tím zajistíme, že uživatelův výběr (např. jen PPL) zůstane aktivní i po resetu dat.
+
+    for k in keys_to_delete:
+        del st.session_state[k]
+
 def select_all(key, options): st.session_state[key] = options
 def clear_all(key): st.session_state[key] = []
 
@@ -168,20 +190,8 @@ def render_statistics():
         st.header("🔍 Filtry")
         
         # --- RESET LOGIKA ---
-        # Zde explicitně mažeme JEN filtry a slider, ale NE graph_carrier_select
-        if st.button("🔄 Resetovat všechny filtry", use_container_width=True):
-            keys_to_delete = []
-            for key in st.session_state.keys():
-                # Mažeme slider data a checkboxy
-                if key == "slider_main_date":
-                    keys_to_delete.append(key)
-                if key.startswith(("filter_", "stat_", "tg_")):
-                    keys_to_delete.append(key)
-                # Důležité: graph_carrier_select NEMAŽEME
-            
-            for k in keys_to_delete:
-                del st.session_state[k]
-            st.rerun()
+        # Použití callbacku on_click zaručuje, že se stav smaže PŘED vykreslením slideru
+        st.button("🔄 Resetovat všechny filtry", use_container_width=True, on_click=reset_filters_callback)
 
         # Daktela
         if "Daktela" in selected_agenda:
@@ -258,19 +268,20 @@ def render_statistics():
                 meta = ["Týden", "Datum od", "Datum do", "Week", "Date from", "Date to", date_col]
                 candidates = [c for c in filtered_df.columns if c not in meta]
                 
-                # Zajistit numeric pro sloupce
+                # Numeric konverze jen na filtrovaných datech
                 for c in candidates:
-                    df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
                     filtered_df[c] = pd.to_numeric(filtered_df[c], errors='coerce').fillna(0)
                 
-                cols = [c for c in candidates if pd.api.types.is_numeric_dtype(df[c])]
+                cols = [c for c in candidates if pd.api.types.is_numeric_dtype(filtered_df[c])]
 
                 if cols:
-                    sums = df[cols].sum().sort_values(ascending=False)
+                    sums = filtered_df[cols].sum().sort_values(ascending=False)
                     top5 = sums.head(5).index.tolist()
                     
                     st.caption("Výběr dopravců:")
-                    # Klíč 'graph_carrier_select' zajišťuje persistenci výběru při resetu data
+                    
+                    # Logika: Streamlit použije default=top5 JEN POKUD klíč neexistuje v session_state.
+                    # Jelikož ho při resetu nemažeme, zůstane tam výběr uživatele (např. PPL).
                     sel_carriers = st.multiselect("", sorted(cols), default=top5, key="graph_carrier_select")
                     
                     if sel_carriers:
