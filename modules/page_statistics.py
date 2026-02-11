@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
-from modules.statistics_logic import calculate_kpis, filter_data 
+# ZMĚNA: Import z nově přejmenovaného souboru 'logic_statistics.py'
+from modules.logic_statistics import calculate_kpis, filter_data 
 
 def render_statistics():
     # --- 1. CSS ÚPRAVA ---
-    # Změnil jsem padding-top na menší hodnotu, aby to nebylo tak odskočené
     st.markdown("""
         <style>
             .block-container {
@@ -80,79 +80,55 @@ def render_statistics():
         if selected_file in st.session_state.uploaded_data:
             current_df = st.session_state.uploaded_data[selected_file]
             
-            # --- NOVÉ ŘEŠENÍ: FILTRY V HLAVNÍM OKNĚ (EXPANDER) ---
-            # Místo sidebar použijeme rozbalovací lištu přímo nad daty.
-            with st.expander("🔍 Filtry a nastavení zobrazení", expanded=True):
-                
-                # Rozdělení filtrů do 4 sloupců vedle sebe
-                f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+            # --- ZMĚNA: FILTRY JSOU ZPĚT V SIDEBARU (protože main.py je opravený) ---
+            with st.sidebar:
+                st.header("🔍 Filtrování dat")
+                st.caption(f"Soubor: {selected_file}")
+                st.divider()
 
                 # 1. Filtr Datum (Vytvořeno)
                 selected_date_range = None
-                with f_col1:
-                    if "Vytvořeno" in current_df.columns:
-                        try:
-                            temp_dates = pd.to_datetime(current_df["Vytvořeno"], errors='coerce').dropna()
-                            if not temp_dates.empty:
-                                min_date = temp_dates.min().date()
-                                max_date = temp_dates.max().date()
-                                st.markdown("**📅 Datum vytvoření**")
-                                selected_date_range = st.date_input(
-                                    "Rozsah:",
-                                    value=(min_date, max_date),
-                                    min_value=min_date,
-                                    max_value=max_date,
-                                    label_visibility="collapsed"
-                                )
-                        except:
-                            st.warning("Chyba data")
-                    else:
-                        st.caption("Sloupec 'Vytvořeno' chybí")
+                if "Vytvořeno" in current_df.columns:
+                    try:
+                        temp_dates = pd.to_datetime(current_df["Vytvořeno"], errors='coerce').dropna()
+                        if not temp_dates.empty:
+                            min_date = temp_dates.min().date()
+                            max_date = temp_dates.max().date()
+                            
+                            st.subheader("📅 Datum")
+                            selected_date_range = st.date_input(
+                                "Rozsah vytvoření:",
+                                value=(min_date, max_date),
+                                min_value=min_date,
+                                max_value=max_date
+                            )
+                    except:
+                        st.warning("Chyba při čtení data.")
+                else:
+                    st.info("Sloupec 'Vytvořeno' chybí.")
 
                 # 2. Filtr Statusy
                 selected_statuses = None
-                with f_col2:
-                    if "Statusy" in current_df.columns:
-                        unique_statuses = sorted(current_df["Statusy"].dropna().unique().astype(str))
-                        st.markdown("**📌 Statusy**")
-                        selected_statuses = st.multiselect(
-                            "Statusy", 
-                            unique_statuses, 
-                            default=unique_statuses,
-                            label_visibility="collapsed"
-                        )
-                    else:
-                        st.caption("Sloupec 'Statusy' chybí")
+                if "Statusy" in current_df.columns:
+                    unique_statuses = sorted(current_df["Statusy"].dropna().unique().astype(str))
+                    st.subheader("📌 Statusy")
+                    selected_statuses = st.multiselect("Vyberte:", unique_statuses, default=unique_statuses)
+                else:
+                    st.info("Sloupec 'Statusy' chybí.")
 
                 # 3. Filtr VIP
                 selected_vip = None
-                with f_col3:
-                    if "VIP" in current_df.columns:
-                        unique_vip = sorted(current_df["VIP"].dropna().unique().astype(str))
-                        st.markdown("**⭐ VIP**")
-                        selected_vip = st.multiselect(
-                            "VIP", 
-                            unique_vip, 
-                            default=unique_vip,
-                            label_visibility="collapsed"
-                        )
-                    else:
-                        st.caption("Sloupec 'VIP' chybí")
+                if "VIP" in current_df.columns:
+                    unique_vip = sorted(current_df["VIP"].dropna().unique().astype(str))
+                    st.subheader("⭐ VIP")
+                    selected_vip = st.multiselect("Vyberte:", unique_vip, default=unique_vip)
 
                 # 4. Filtr Kategorie
                 selected_categories = None
-                with f_col4:
-                    if "Kategorie" in current_df.columns:
-                        unique_cats = sorted(current_df["Kategorie"].dropna().unique().astype(str))
-                        st.markdown("**📂 Kategorie**")
-                        selected_categories = st.multiselect(
-                            "Kategorie", 
-                            unique_cats, 
-                            default=unique_cats,
-                            label_visibility="collapsed"
-                        )
-                    else:
-                        st.caption("Sloupec 'Kategorie' chybí")
+                if "Kategorie" in current_df.columns:
+                    unique_cats = sorted(current_df["Kategorie"].dropna().unique().astype(str))
+                    st.subheader("📂 Kategorie")
+                    selected_categories = st.multiselect("Vyberte:", unique_cats, default=unique_cats)
 
             # --- APLIKACE FILTRU NA DATA ---
             filtered_df = filter_data(
@@ -167,7 +143,6 @@ def render_statistics():
             kpis = calculate_kpis(filtered_df)
             
             # --- Vykreslení KPI ---
-            st.divider()
             st.markdown(f"### 📈 Klíčové metriky (Zobrazeno {len(filtered_df)} z {len(current_df)} řádků)")
             
             kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
@@ -196,6 +171,8 @@ def render_statistics():
                 else:
                     st.metric(label="Prům. reakce klienta", value="N/A")
             
+            st.divider()
+
             # --- Vykreslení Tabulky ---
             st.markdown(f"**Detailní data:** `{selected_file}`")
             

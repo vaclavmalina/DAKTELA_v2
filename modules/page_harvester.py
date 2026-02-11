@@ -182,8 +182,6 @@ def render_harvester():
     if st.session_state.harvester_phase == "processing":
         
         # !!!!!!!!!!!!! OPRAVA DUCHŮ !!!!!!!!!!!!!
-        # Tato pauza zajistí, že Streamlit stihne smazat tlačítka z minulé fáze
-        # dříve, než začne procesorově náročná operace.
         time.sleep(0.2) 
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -327,6 +325,9 @@ def render_harvester():
                         ticket_entry['ai_error'] = str(e); ticket_entry['new_status'] = "CHYBA AI"
 
                 full_export_data.append(ticket_entry)
+                
+                # Ošetření API limitů
+                time.sleep(0.1) 
 
             except Exception: pass
             

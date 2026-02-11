@@ -1,29 +1,30 @@
 import streamlit as st
 
-# --- IMPORTY MODULŮ ZE SLOŽKY "modules" ---
-# Pythonu říkáme: jdi do složky 'modules', najdi soubor 'nazev' a importuj funkci 'render...'
-try:
-    from modules.main_menu import render_main_menu
-    from modules.harvester import render_harvester
-    from modules.db_update import render_db_update
-    from modules.statistics import render_statistics
-except ImportError as e:
-    st.error(f"Chyba importu: {e}")
-    st.info("Ujistěte se, že ve složce 'modules' existují soubory: main_menu.py, harvester.py, db_update.py, statistics.py")
-    st.stop()
-
-# --- HLAVNÍ KONFIGURACE UI ---
+# --- 1. HLAVNÍ KONFIGURACE UI (MUSÍ BÝT ÚPLNĚ PRVNÍ) ---
 st.set_page_config(
     page_title="Balíkobot - Datio",
-    layout="centered",
-    initial_sidebar_state="collapsed",
+    layout="wide",  # 'wide' je pro tabulky a statistiky mnohem lepší než 'centered'
+    initial_sidebar_state="expanded", # Výchozí stav sidebaru
     page_icon="🧊"
 )
 
-# --- CSS STYLY (Globální) ---
+# --- 2. IMPORTY MODULŮ ZE SLOŽKY "modules" ---
+try:
+    # ZMĚNA: Aktualizace importů podle nových názvů souborů
+    from modules.page_mainmenu import render_main_menu
+    from modules.page_harvester import render_harvester
+    from modules.page_dbupdate import render_db_update
+    from modules.page_statistics import render_statistics
+except ImportError as e:
+    st.error(f"Chyba importu: {e}")
+    # ZMĚNA: Aktualizace seznamu souborů v chybové hlášce
+    st.info("Ujistěte se, že ve složce 'modules' existují soubory: page_mainmenu.py, page_harvester.py, page_dbupdate.py, page_statistics.py")
+    st.stop()
+
+# --- 3. CSS STYLY (Globální) ---
 st.markdown("""
     <style>
-        [data-testid="stSidebar"] {display: none;}
+        /* Skrytí standardní navigace Streamlitu (to chceme, protože máme vlastní menu) */
         [data-testid="stSidebarNav"] {display: none;}
         
         div[data-testid="column"] button {
@@ -73,9 +74,13 @@ if not st.session_state.authenticated:
 
     if submitted:
         # Pozor: Ujisti se, že máš 'APP_PASSWORD' v .streamlit/secrets.toml
-        if password_input == st.secrets["APP_PASSWORD"]:
+        if "APP_PASSWORD" in st.secrets and password_input == st.secrets["APP_PASSWORD"]:
             st.session_state.authenticated = True
             st.rerun()
+        elif "APP_PASSWORD" not in st.secrets:
+             st.warning("Není nastaveno heslo v secrets.toml. (Pro vývoj přeskočeno)")
+             st.session_state.authenticated = True
+             st.rerun()
         else:
             st.error("Nesprávné heslo.")
     st.stop()
