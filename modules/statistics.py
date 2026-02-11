@@ -85,13 +85,17 @@ def render_statistics():
             with st.sidebar:
                 st.header("🔍 Filtrování dat")
                 st.write(f"**Soubor:** {selected_file}")
+                
+                # DIAGNOSTIKA: Výpis dostupných sloupců (pro kontrolu)
+                with st.expander("ℹ️ Dostupné sloupce v souboru"):
+                    st.write(list(current_df.columns))
+
                 st.divider()
 
                 # 1. Filtr Datum (Vytvořeno)
                 selected_date_range = None
                 if "Vytvořeno" in current_df.columns:
                     try:
-                        # Konverze pro zjištění min/max data
                         temp_dates = pd.to_datetime(current_df["Vytvořeno"], errors='coerce').dropna()
                         if not temp_dates.empty:
                             min_date = temp_dates.min().date()
@@ -102,47 +106,40 @@ def render_statistics():
                                 "Vyberte rozsah:",
                                 value=(min_date, max_date),
                                 min_value=min_date,
-                                max_value=max_date,
-                                help="Zvolte počáteční a koncové datum."
+                                max_value=max_date
                             )
                     except Exception:
-                        st.warning("Nepodařilo se načíst data pro filtr času.")
+                        st.warning("Chyba při načítání dat.")
+                else:
+                    st.info("⚠️ Sloupec 'Vytvořeno' nenalezen.")
 
                 # 2. Filtr Statusy
                 selected_statuses = None
                 if "Statusy" in current_df.columns:
                     unique_statuses = sorted(current_df["Statusy"].dropna().unique().astype(str))
                     st.subheader("📌 Statusy")
-                    selected_statuses = st.multiselect(
-                        "Vyberte statusy:",
-                        options=unique_statuses,
-                        default=unique_statuses, # Ve výchozím stavu vše
-                        placeholder="Zvolte statusy..."
-                    )
+                    selected_statuses = st.multiselect("Vyberte statusy:", unique_statuses, default=unique_statuses)
+                else:
+                    st.info("⚠️ Sloupec 'Statusy' nenalezen.")
 
                 # 3. Filtr VIP
                 selected_vip = None
                 if "VIP" in current_df.columns:
                     unique_vip = sorted(current_df["VIP"].dropna().unique().astype(str))
                     st.subheader("⭐ VIP")
-                    selected_vip = st.multiselect(
-                        "Filtr VIP:",
-                        options=unique_vip,
-                        default=unique_vip,
-                        placeholder="Zvolte typ (VIP/ne-VIP)..."
-                    )
+                    selected_vip = st.multiselect("Filtr VIP:", unique_vip, default=unique_vip)
+                else:
+                    # Pokud nemáš sloupec VIP, nevadí, jen se nic nezobrazí
+                    pass 
 
                 # 4. Filtr Kategorie
                 selected_categories = None
                 if "Kategorie" in current_df.columns:
                     unique_cats = sorted(current_df["Kategorie"].dropna().unique().astype(str))
                     st.subheader("📂 Kategorie")
-                    selected_categories = st.multiselect(
-                        "Vyberte kategorie:",
-                        options=unique_cats,
-                        default=unique_cats,
-                        placeholder="Zvolte kategorie..."
-                    )
+                    selected_categories = st.multiselect("Vyberte kategorie:", unique_cats, default=unique_cats)
+                else:
+                    st.info("⚠️ Sloupec 'Kategorie' nenalezen.")
             
             # --- ZMĚNA: APLIKACE FILTRU NA DATA ---
             # Voláme logiku pro filtrování
