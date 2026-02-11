@@ -1,6 +1,9 @@
 import pandas as pd
 
 def format_human_time(seconds):
+    """
+    Převede sekundy na čitelný formát (h m s).
+    """
     if pd.isna(seconds) or seconds is None: return "N/A"
     seconds = int(round(seconds))
     if seconds < 60: return f"{seconds} s"
@@ -12,26 +15,30 @@ def format_human_time(seconds):
         m, s = divmod(remainder, 60)
         return f"{h} h {m} m"
 
-# ZMĚNA: Přidán parametr **kwargs pro dynamické filtry
-def filter_data(df, date_range=None, status_list=None, vip_list=None, status_match_mode='any', **kwargs):
+# ZMĚNA: Přidán parametr date_col_name a dayfirst=True do pd.to_datetime
+def filter_data(df, date_range=None, date_col_name=None, status_list=None, vip_list=None, status_match_mode='any', **kwargs):
     """
     Univerzální filtrační funkce.
-    **kwargs: Slovník { 'NazevSloupce': ['hodnota1', 'hodnota2'] }
+    date_col_name: Přesný název sloupce, podle kterého se má filtrovat datum.
     """
     filtered_df = df.copy()
 
-    # 1. Datum (Vytvořeno)
-    if date_range and len(date_range) == 2 and "Vytvořeno" in filtered_df.columns:
-        filtered_df["Vytvořeno_dt"] = pd.to_datetime(filtered_df["Vytvořeno"], errors='coerce')
+    # 1. Datum (Dynamický sloupec)
+    # Pokud máme rozsah data A TAKÉ víme, jak se ten sloupec jmenuje
+    if date_range and len(date_range) == 2 and date_col_name and date_col_name in filtered_df.columns:
+        # Převedeme sloupec na datetime (pokud už není) s podporou dayfirst=True (pro 13.01.2025)
+        filtered_df["_temp_date_filter_col"] = pd.to_datetime(filtered_df[date_col_name], dayfirst=True, errors='coerce')
+        
         start_date = pd.to_datetime(date_range[0])
         end_date = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        
         filtered_df = filtered_df[
-            (filtered_df["Vytvořeno_dt"] >= start_date) & 
-            (filtered_df["Vytvořeno_dt"] <= end_date)
+            (filtered_df["_temp_date_filter_col"] >= start_date) & 
+            (filtered_df["_temp_date_filter_col"] <= end_date)
         ]
-        filtered_df = filtered_df.drop(columns=["Vytvořeno_dt"])
+        filtered_df = filtered_df.drop(columns=["_temp_date_filter_col"])
 
-    # 2. Statusy (Specialita s čárkou)
+    # 2. Statusy
     if status_list and "Statusy" in filtered_df.columns:
         selected_set = set(status_list)
         def check_status_match(row_val):
@@ -47,16 +54,17 @@ def filter_data(df, date_range=None, status_list=None, vip_list=None, status_mat
     if vip_list and "VIP" in filtered_df.columns:
         filtered_df = filtered_df[filtered_df["VIP"].isin(vip_list)]
 
-    # 4. Dynamické filtry (Kategorie, Priorita, Uživatel, Carrier, atd.)
-    # Projde všechny ostatní argumenty a pokud sloupec existuje, aplikuje filtr
+    # 4. Dynamické filtry (kwargs)
     for col_name, selected_values in kwargs.items():
         if selected_values and col_name in filtered_df.columns:
-            # Převedeme na string a filtrujeme
             filtered_df = filtered_df[filtered_df[col_name].astype(str).isin(selected_values)]
 
     return filtered_df
 
 def calculate_kpis(df):
+    """
+    Vypočítá klíčové statistiky z DataFrame.
+    """
     stats = {"row_count": len(df), "avg_activities": None, "avg_response_time": None, "avg_client_reaction": None}
     if df.empty: return stats
 
