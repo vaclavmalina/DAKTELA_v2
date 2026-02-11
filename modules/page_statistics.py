@@ -1,7 +1,15 @@
 import streamlit as st
 import pandas as pd
+import datetime
 # ZMĚNA: Import z nově přejmenovaného souboru 'logic_statistics.py'
 from modules.logic_statistics import calculate_kpis, filter_data 
+
+# --- HELPER FUNKCE PRO TLAČÍTKA VŠE/NIC ---
+def select_all(key, options):
+    st.session_state[key] = options
+
+def clear_all(key):
+    st.session_state[key] = []
 
 def render_statistics():
     # --- 1. CSS ÚPRAVA ---
@@ -13,6 +21,11 @@ def render_statistics():
                 padding-left: 1rem !important;
                 padding-right: 1rem !important;
                 padding-bottom: 1rem !important;
+            }
+            /* Zmenšení mezer mezi tlačítky v sidebaru */
+            .stButton button {
+                padding: 0.25rem 0.5rem;
+                font-size: 0.8rem;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -80,13 +93,13 @@ def render_statistics():
         if selected_file in st.session_state.uploaded_data:
             current_df = st.session_state.uploaded_data[selected_file]
             
-            # --- ZMĚNA: FILTRY JSOU ZPĚT V SIDEBARU (protože main.py je opravený) ---
+            # --- SIDEBAR FILTRY ---
             with st.sidebar:
                 st.header("🔍 Filtrování dat")
                 st.caption(f"Soubor: {selected_file}")
                 st.divider()
 
-                # 1. Filtr Datum (Vytvořeno)
+                # --- 1. Filtr Datum (SLIDER) ---
                 selected_date_range = None
                 if "Vytvořeno" in current_df.columns:
                     try:
@@ -95,64 +108,110 @@ def render_statistics():
                             min_date = temp_dates.min().date()
                             max_date = temp_dates.max().date()
                             
-                            st.subheader("📅 Datum")
-                            selected_date_range = st.date_input(
-                                "Rozsah vytvoření:",
-                                value=(min_date, max_date),
-                                min_value=min_date,
-                                max_value=max_date
-                            )
+                            st.subheader("📅 Datum (Posuvník)")
+                            # Pokud je jen jedno datum, slider nefunguje jako range, ošetříme to
+                            if min_date == max_date:
+                                st.info(f"Data jsou pouze ze dne: {min_date}")
+                                selected_date_range = (min_date, max_date)
+                            else:
+                                selected_date_range = st.slider(
+                                    "Vyberte období:",
+                                    min_value=min_date,
+                                    max_value=max_date,
+                                    value=(min_date, max_date),
+                                    format="DD.MM.YYYY"
+                                )
                     except:
                         st.warning("Chyba při čtení data.")
                 else:
                     st.info("Sloupec 'Vytvořeno' chybí.")
+                
+                st.divider()
 
-                # 2. Filtr Statusy (OPRAVENO: ROZSEKÁNÍ KOMBINACÍ)
+                # --- 2. Filtr Statusy ---
                 selected_statuses = None
+                status_match_mode = 'any' # Default
+
                 if "Statusy" in current_df.columns:
                     try:
-                        # 1. Vezmeme všechny hodnoty, zahodíme prázdné, převedeme na string
+                        # Extrakt unikátních statusů + ŘAZENÍ A-Z
                         raw_statuses = current_df["Statusy"].dropna().astype(str)
-                        
-                        # 2. Vytvoříme množinu (set) pro unikátní hodnoty
                         unique_statuses_set = set()
-                        
                         for row_val in raw_statuses:
-                            # Rozdělíme podle čárky (např. "Open, VIP" -> ["Open", " VIP"])
                             parts = row_val.split(',')
                             for part in parts:
-                                # Očistíme od mezer (např. " VIP" -> "VIP") a přidáme
                                 clean_status = part.strip()
-                                if clean_status: # Abychom nepřidali prázdný string
-                                    unique_statuses_set.add(clean_status)
+                                if clean_status: unique_statuses_set.add(clean_status)
                         
-                        # 3. Seřadíme
                         unique_statuses = sorted(list(unique_statuses_set))
                         
                         st.subheader("📌 Statusy")
+                        
+                        # Tlačítka Vše / Nic
+                        c1, c2 = st.columns(2)
+                        if c1.button("✅ Vše", key="stat_all"): select_all("filter_statuses", unique_statuses)
+                        if c2.button("❌ Nic", key="stat_none"): clear_all("filter_statuses")
+
+                        # Multiselect s klíčem v session state
                         selected_statuses = st.multiselect(
                             "Vyberte:", 
                             unique_statuses, 
-                            default=unique_statuses
+                            default=unique_statuses, # Defaultně vše, nebo prázdné list, dle preference
+                            key="filter_statuses"
                         )
+
+                        # Volba logiky hledání
+                        st.caption("Režim hledání:")
+                        mode_selection = st.radio(
+                            "Režim statusů",
+                            options=["Obsahuje alespoň jeden", "Přesná shoda kombinace"],
+                            index=0,
+                            label_visibility="collapsed"
+                        )
+                        status_match_mode = 'exact' if mode_selection == "Přesná shoda kombinace" else 'any'
+
                     except Exception as e:
-                        st.warning(f"Chyba při načítání statusů: {e}")
+                        st.warning(f"Chyba: {e}")
                 else:
                     st.info("Sloupec 'Statusy' chybí.")
 
-                # 3. Filtr VIP
+                st.divider()
+
+                # --- 3. Filtr VIP ---
                 selected_vip = None
                 if "VIP" in current_df.columns:
                     unique_vip = sorted(current_df["VIP"].dropna().unique().astype(str))
                     st.subheader("⭐ VIP")
-                    selected_vip = st.multiselect("Vyberte:", unique_vip, default=unique_vip)
+                    
+                    c1, c2 = st.columns(2)
+                    if c1.button("✅ Vše", key="vip_all"): select_all("filter_vip", unique_vip)
+                    if c2.button("❌ Nic", key="vip_none"): clear_all("filter_vip")
 
-                # 4. Filtr Kategorie
+                    selected_vip = st.multiselect(
+                        "Vyberte:", 
+                        unique_vip, 
+                        default=unique_vip,
+                        key="filter_vip"
+                    )
+
+                st.divider()
+
+                # --- 4. Filtr Kategorie ---
                 selected_categories = None
                 if "Kategorie" in current_df.columns:
                     unique_cats = sorted(current_df["Kategorie"].dropna().unique().astype(str))
                     st.subheader("📂 Kategorie")
-                    selected_categories = st.multiselect("Vyberte:", unique_cats, default=unique_cats)
+
+                    c1, c2 = st.columns(2)
+                    if c1.button("✅ Vše", key="cat_all"): select_all("filter_cat", unique_cats)
+                    if c2.button("❌ Nic", key="cat_none"): clear_all("filter_cat")
+
+                    selected_categories = st.multiselect(
+                        "Vyberte:", 
+                        unique_cats, 
+                        default=unique_cats,
+                        key="filter_cat"
+                    )
 
             # --- APLIKACE FILTRU NA DATA ---
             filtered_df = filter_data(
@@ -160,7 +219,8 @@ def render_statistics():
                 date_range=selected_date_range,
                 status_list=selected_statuses,
                 vip_list=selected_vip,
-                category_list=selected_categories
+                category_list=selected_categories,
+                status_match_mode=status_match_mode # Posíláme novou logiku
             )
 
             # --- VÝPOČET KPI ---
