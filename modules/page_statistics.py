@@ -1,305 +1,280 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import os
+# Ujisti se, že logic_statistics.py je aktualizovaný a přijímá user_list/priority_list/kwargs
 from modules.logic_statistics import calculate_kpis, filter_data 
 
-# --- HELPER FUNKCE PRO TLAČÍTKA VŠE/NIC ---
-def select_all(key, options):
-    st.session_state[key] = options
+# --- HELPER FUNKCE ---
+def select_all(key, options): st.session_state[key] = options
+def clear_all(key): st.session_state[key] = []
 
-def clear_all(key):
-    st.session_state[key] = []
+def load_local_files():
+    """Automaticky načte soubory ze složky data/excel."""
+    local_path = "data/excel"
+    if os.path.exists(local_path):
+        files = [f for f in os.listdir(local_path) if f.endswith(('.csv', '.xlsx', '.xls'))]
+        for file_name in files:
+            if file_name not in st.session_state.uploaded_data:
+                full_path = os.path.join(local_path, file_name)
+                try:
+                    if file_name.endswith('.csv'): df = pd.read_csv(full_path)
+                    else: df = pd.read_excel(full_path)
+                    st.session_state.uploaded_data[file_name] = df
+                except: pass
+
+# --- UNIVERZÁLNÍ FUNKCE PRO VYKRESLENÍ FILTRŮ ---
+def render_standard_filters(df, filter_columns):
+    """
+    Vykreslí datum (pokud existuje sloupec data) a sadu multiselect filtrů.
+    Vrací slovník { 'NazevSloupce': [vybrane_hodnoty], 'date_range': (od, do) }
+    """
+    filters = {}
+    
+    # 1. CHYTRÉ HLEDÁNÍ DATA
+    # Rozšířený seznam možných názvů
+    possible_date_cols = [
+        "Vytvořeno", "Datum", "Date", "Created", "Time", "Čas", 
+        "timestamp", "Timestamp", "Datum vytvoření", "Vytvořeno dne", "Day"
+    ]
+    
+    # Zkusíme najít sloupec podle názvu
+    date_col = next((c for c in possible_date_cols if c in df.columns), None)
+
+    # Pokud nenajdeme podle názvu, zkusíme najít podle datového typu (datetime)
+    if not date_col:
+        for col in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df[col]):
+                date_col = col
+                break
+
+    if date_col:
+        try:
+            # Převedeme na datetime pro jistotu
+            dates = pd.to_datetime(df[date_col], errors='coerce').dropna()
+            
+            if not dates.empty:
+                mn, mx = dates.min().date(), dates.max().date()
+                st.subheader(f"📅 Datum ({date_col})")
+                
+                if mn == mx:
+                    st.info(f"Data pouze z: {mn}")
+                    filters["date_range"] = (mn, mx)
+                else:
+                    # Tady je ten posuvník
+                    filters["date_range"] = st.slider(
+                        "", 
+                        min_value=mn, 
+                        max_value=mx, 
+                        value=(mn, mx), 
+                        format="DD.MM",
+                        key=f"slider_{date_col}" # Unikátní klíč
+                    )
+            else:
+                 # Sloupec existuje, ale po konverzi je prázdný
+                 pass
+        except Exception as e:
+            st.warning(f"Chyba při zpracování data ({date_col}): {e}")
+
+    # 2. OSTATNÍ SPECIFICKÉ FILTRY (Carrier, Priority, atd.)
+    for label, col_name in filter_columns.items():
+        if col_name in df.columns:
+            try:
+                # Získání unikátních hodnot (ošetření seznamů oddělených čárkou)
+                raw = df[col_name].dropna().astype(str)
+                unq = set()
+                for x in raw: unq.update([i.strip() for i in x.split(',') if i.strip()])
+                opts = sorted(list(unq))
+                
+                key_prefix = f"filter_{col_name}"
+                st.subheader(label)
+                c1, c2 = st.columns(2)
+                c1.button("Vše", key=f"all_{key_prefix}", on_click=select_all, args=(key_prefix, opts))
+                c2.button("Nic", key=f"none_{key_prefix}", on_click=clear_all, args=(key_prefix,))
+                
+                sel = st.multiselect("", opts, default=opts, key=key_prefix, label_visibility="collapsed")
+                filters[col_name] = sel
+            except: pass
+            
+    return filters
 
 def render_statistics():
-    # --- 1. CSS ÚPRAVA ---
+    # --- CSS ---
     st.markdown("""
         <style>
-            .block-container {
-                max-width: 95% !important;
-                padding-top: 2rem !important; 
-                padding-left: 1rem !important;
-                padding-right: 1rem !important;
-                padding-bottom: 1rem !important;
-            }
-            
-            /* --- STYLOVÁNÍ TLAČÍTEK 'VŠE' a 'NIC' V SIDEBARU --- */
-            /* Cílíme pouze na tlačítka uvnitř horizontálních bloků (sloupců) v sidebaru */
+            .block-container { padding-top: 2rem !important; }
+            section[data-testid="stSidebar"] .block-container { padding-top: 1rem !important; }
+            [data-testid="stSidebar"] hr { margin: 0.5rem 0 !important; }
+            [data-testid="stSidebar"] h3 { font-size: 13px !important; margin-bottom: -5px !important; padding-top: 5px !important; }
             [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
-                background-color: transparent !important;
-                border: 1px solid rgba(49, 51, 63, 0.2) !important;
-                color: rgba(49, 51, 63, 0.6) !important;
-                font-size: 12px !important;
-                font-weight: 400 !important;
-                padding: 2px 10px !important;
-                min-height: 0px !important;
-                height: 28px !important;
-                line-height: 1.2 !important;
-                border-radius: 4px !important;
-                box-shadow: none !important;
-                transition: all 0.2s ease;
+                background: transparent; border: 1px solid rgba(128,128,128,0.2);
+                color: rgba(49, 51, 63, 0.6); font-size: 10px; padding: 0 5px; height: 22px; width: 100%; min-height: 0px;
             }
-
-            /* Hover efekt pro tato malá tlačítka */
             [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
-                border-color: #FF4B4B !important;
-                color: #FF4B4B !important;
-                background-color: rgba(255, 75, 75, 0.05) !important;
+                border-color: #FF4B4B; color: #FF4B4B; background: rgba(255, 75, 75, 0.05);
             }
-
-            /* Odstranění otravného červeného okraje při kliknutí (focus) */
-            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:focus {
-                box-shadow: none !important;
-                border-color: #FF4B4B !important;
-            }
+            .stToggle { margin-top: -5px; }
         </style>
     """, unsafe_allow_html=True)
 
-    # --- Inicializace Session State ---
-    if 'uploaded_data' not in st.session_state:
-        st.session_state.uploaded_data = {}
+    # --- INIT ---
+    if 'uploaded_data' not in st.session_state: st.session_state.uploaded_data = {}
+    if 'uploader_key' not in st.session_state: st.session_state.uploader_key = 0
+    if 'datasets' not in st.session_state: st.session_state.datasets = {}
     
-    if 'uploader_key' not in st.session_state:
-        st.session_state.uploader_key = 0
+    # --- DATASOURCE CONFIG ---
+    DATA_SOURCE_PATH = "data/excel"
+    DATA_MAPPING = {
+        "Daktela": ["Daktela", "daktela"],
+        "Hotline": ["HL", "hl", "Hotline"],
+        "Broken Order": ["BO", "bo", "Broken"],
+        "Zásilky": ["Packages", "packages", "Zasilky"]
+    }
 
-    # --- Header ---
-    col_back, col_title, col_void = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("⬅️ Menu", key="stat_back_btn"):
-            st.session_state.current_app = "main_menu"
-            st.rerun()
-            
-    with col_title:
-        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>📊 Statistiky a data</h2>", unsafe_allow_html=True)
-    st.divider()
+    # --- LOAD DATA ---
+    if os.path.exists(DATA_SOURCE_PATH):
+        files = [f for f in os.listdir(DATA_SOURCE_PATH) if f.endswith(('.csv', '.xlsx', '.xls'))]
+        for category, keywords in DATA_MAPPING.items():
+            matched_file = next((f for f in files if any(k in f for k in keywords)), None)
+            if matched_file and category not in st.session_state.datasets:
+                full_path = os.path.join(DATA_SOURCE_PATH, matched_file)
+                try:
+                    if matched_file.endswith('.csv'): df = pd.read_csv(full_path)
+                    else: df = pd.read_excel(full_path)
+                    st.session_state.datasets[category] = {"filename": matched_file, "data": df}
+                except: pass
 
-    # --- Sekce pro nahrání souborů ---
-    st.markdown("### 📤 Správa dat")
-    
-    uploaded_files = st.file_uploader(
-        "📂 Klikněte pro výběr souborů nebo je přetáhněte sem (CSV, Excel)", 
-        type=['csv', 'xlsx', 'xls'], 
-        accept_multiple_files=True,
-        key=f"uploader_{st.session_state.uploader_key}"
-    )
-
-    if uploaded_files:
-        for uploaded_file in uploaded_files:
-            file_name = uploaded_file.name
-            try:
-                if file_name.endswith('.csv'):
-                    df = pd.read_csv(uploaded_file)
-                else:
-                    df = pd.read_excel(uploaded_file)
-                
-                st.session_state.uploaded_data[file_name] = df
-                st.toast(f"Soubor '{file_name}' byl úspěšně načten.", icon="✅")
-                
-            except Exception as e:
-                st.error(f"Chyba u souboru {file_name}: {e}")
-
-    # --- Výběr a zobrazení dat ---
-    if len(st.session_state.uploaded_data) > 0:
-        
+    # --- SIDEBAR ---
+    with st.sidebar:
+        if st.button("⬅️ Zpět do Menu", use_container_width=True, type="primary"):
+            st.session_state.current_app = "main_menu"; st.rerun()
         st.divider()
         
-        col_select, col_actions = st.columns([3, 1], vertical_alignment="bottom")
+        st.header("📂 Výběr agendy")
+        available_cats = list(st.session_state.datasets.keys())
+        if not available_cats: st.warning("Žádná data v 'data/excel'."); st.stop()
         
-        with col_select:
-            file_options = list(st.session_state.uploaded_data.keys())
-            selected_file = st.selectbox("📂 Vyberte soubor k zobrazení:", file_options)
+        # Default index na Daktelu (pokud tam je), jinak 0
+        idx = 3 if "Daktela" in available_cats else 0
+        if idx >= len(available_cats): idx = 0
         
-        with col_actions:
-            if st.button("🗑️ Smazat vše", use_container_width=True):
-                st.session_state.uploaded_data = {}
-                st.session_state.uploader_key += 1
-                st.rerun()
+        selected_agenda = st.radio("Dataset:", options=list(DATA_MAPPING.keys()), index=3, key="agenda")
+        
+        if selected_agenda in st.session_state.datasets:
+            st.caption(f"`{st.session_state.datasets[selected_agenda]['filename']}`")
+        else:
+            st.warning("Soubor nenalezen.")
 
-        if selected_file in st.session_state.uploaded_data:
-            current_df = st.session_state.uploaded_data[selected_file]
+    # --- MAIN ---
+    col_tit, _ = st.columns([3, 1])
+    with col_tit: st.markdown(f"## 📊 Statistiky: {selected_agenda}")
+    
+    if selected_agenda not in st.session_state.datasets:
+        st.info(f"Pro kategorii **{selected_agenda}** nebyl ve složce `data/excel` nalezen soubor."); return
+
+    df = st.session_state.datasets[selected_agenda]["data"]
+    filtered_df = df.copy()
+
+    # ========================== FILTROVÁNÍ PODLE AGENDY ==========================
+    with st.sidebar:
+        st.divider()
+        st.header("🔍 Filtry")
+        
+        # --- A) DAKTELA ---
+        if selected_agenda == "Daktela":
+            # 1. Standardní filtry
+            daktela_extra_cols = {
+                "📂 Kategorie": "Kategorie",
+                "🚨 Priorita": "Priorita",
+                "👤 Uživatel": "Uživatel"
+            }
+            filters = render_standard_filters(df, daktela_extra_cols)
             
-            # --- SIDEBAR FILTRY ---
-            with st.sidebar:
-                st.header("🔍 Filtrování dat")
-                st.caption(f"Soubor: {selected_file}")
-                st.divider()
+            # 2. Statusy (Extra logika)
+            sel_stats = None; stat_mode = 'any'
+            if "Statusy" in df.columns:
+                raw = df["Statusy"].dropna().astype(str); unq = set()
+                for x in raw: unq.update([i.strip() for i in x.split(',') if i.strip()])
+                opts = sorted(list(unq))
+                st.subheader("📌 Statusy"); c1, c2 = st.columns(2)
+                c1.button("Vše", key="s_all", on_click=select_all, args=("stat_dk", opts))
+                c2.button("Nic", key="s_none", on_click=clear_all, args=("stat_dk",))
+                sel_stats = st.multiselect("", opts, default=opts, key="stat_dk", label_visibility="collapsed")
+                if st.toggle("Přesná shoda", key="tg_stat"): stat_mode = 'exact'
 
-                # --- 1. Filtr Datum (SLIDER) ---
-                selected_date_range = None
-                if "Vytvořeno" in current_df.columns:
-                    try:
-                        temp_dates = pd.to_datetime(current_df["Vytvořeno"], errors='coerce').dropna()
-                        if not temp_dates.empty:
-                            min_date = temp_dates.min().date()
-                            max_date = temp_dates.max().date()
-                            
-                            st.subheader("📅 Datum (Období)")
-                            
-                            if min_date == max_date:
-                                st.info(f"Data pouze z: {min_date}")
-                                selected_date_range = (min_date, max_date)
-                            else:
-                                # Použití slideru místo kalendáře
-                                selected_date_range = st.slider(
-                                    "Vyberte rozsah:",
-                                    min_value=min_date,
-                                    max_value=max_date,
-                                    value=(min_date, max_date),
-                                    format="DD.MM.YYYY"
-                                )
-                    except:
-                        st.warning("Chyba při čtení data.")
-                else:
-                    st.info("Sloupec 'Vytvořeno' chybí.")
-                
-                st.divider()
+            # 3. VIP (Extra logika)
+            sel_vip = None
+            if "VIP" in df.columns:
+                st.subheader("⭐ VIP")
+                if st.toggle("Jen VIP", key="tg_vip"): sel_vip = ["→ VIP KLIENT ←"]
 
-                # --- 2. Filtr Statusy ---
-                selected_statuses = None
-                status_match_mode = 'any'
-
-                if "Statusy" in current_df.columns:
-                    try:
-                        # Získání unikátních statusů (rozsekání podle čárky)
-                        raw_statuses = current_df["Statusy"].dropna().astype(str)
-                        unique_statuses_set = set()
-                        for row_val in raw_statuses:
-                            parts = row_val.split(',')
-                            for part in parts:
-                                clean_status = part.strip()
-                                if clean_status: unique_statuses_set.add(clean_status)
-                        
-                        # ŘAZENÍ A-Z
-                        unique_statuses = sorted(list(unique_statuses_set))
-                        
-                        st.subheader("📌 Statusy")
-                        
-                        # Tlačítka Vše / Nic (S novým designem)
-                        c1, c2 = st.columns(2)
-                        c1.button("Vše", key="stat_all", on_click=select_all, args=("filter_statuses", unique_statuses), use_container_width=True)
-                        c2.button("Nic", key="stat_none", on_click=clear_all, args=("filter_statuses",), use_container_width=True)
-
-                        # Multiselect (s klíčem pro ovládání tlačítky)
-                        selected_statuses = st.multiselect(
-                            "Vyberte statusy:", 
-                            unique_statuses, 
-                            default=unique_statuses,
-                            key="filter_statuses"
-                        )
-
-                        # Volba logiky hledání
-                        st.caption("Logika hledání:")
-                        mode_selection = st.radio(
-                            "Režim statusů",
-                            options=["Obsahuje alespoň jeden", "Přesná shoda kombinace"],
-                            index=0,
-                            label_visibility="collapsed"
-                        )
-                        status_match_mode = 'exact' if mode_selection == "Přesná shoda kombinace" else 'any'
-
-                    except Exception as e:
-                        st.warning(f"Chyba: {e}")
-                else:
-                    st.info("Sloupec 'Statusy' chybí.")
-
-                st.divider()
-
-                # --- 3. Filtr VIP ---
-                selected_vip = None
-                if "VIP" in current_df.columns:
-                    unique_vip = sorted(current_df["VIP"].dropna().unique().astype(str))
-                    st.subheader("⭐ VIP")
-                    
-                    c1, c2 = st.columns(2)
-                    c1.button("Vše", key="vip_all", on_click=select_all, args=("filter_vip", unique_vip), use_container_width=True)
-                    c2.button("Nic", key="vip_none", on_click=clear_all, args=("filter_vip",), use_container_width=True)
-
-                    selected_vip = st.multiselect(
-                        "Vyberte VIP:", 
-                        unique_vip, 
-                        default=unique_vip,
-                        key="filter_vip"
-                    )
-
-                st.divider()
-
-                # --- 4. Filtr Kategorie ---
-                selected_categories = None
-                if "Kategorie" in current_df.columns:
-                    unique_cats = sorted(current_df["Kategorie"].dropna().unique().astype(str))
-                    st.subheader("📂 Kategorie")
-
-                    c1, c2 = st.columns(2)
-                    c1.button("Vše", key="cat_all", on_click=select_all, args=("filter_cat", unique_cats), use_container_width=True)
-                    c2.button("Nic", key="cat_none", on_click=clear_all, args=("filter_cat",), use_container_width=True)
-
-                    selected_categories = st.multiselect(
-                        "Vyberte kategorie:", 
-                        unique_cats, 
-                        default=unique_cats,
-                        key="filter_cat"
-                    )
-
-            # --- APLIKACE FILTRU NA DATA ---
-            # Zde voláme funkci z logic_statistics.py
+            # Aplikace filtrů Daktela
             filtered_df = filter_data(
-                current_df, 
-                date_range=selected_date_range,
-                status_list=selected_statuses,
-                vip_list=selected_vip,
-                category_list=selected_categories,
-                status_match_mode=status_match_mode
+                df, 
+                date_range=filters.get("date_range"), # Datum z univerzální funkce
+                status_list=sel_stats,
+                vip_list=sel_vip,
+                status_match_mode=stat_mode,
+                # Dynamické argumenty
+                Kategorie=filters.get("Kategorie"),
+                Priorita=filters.get("Priorita"),
+                Uživatel=filters.get("Uživatel")
             )
 
-            # --- VÝPOČET KPI ---
-            kpis = calculate_kpis(filtered_df)
+        # --- B) HOTLINE & BROKEN ORDER ---
+        elif selected_agenda in ["Hotline", "Broken Order"]:
+            # Definice sloupců pro filtry
+            hl_bo_cols = {
+                "🚚 Carrier": "Carrier",
+                "⚠️ Příčina chyby": "Příčina chyby",
+                "🚨 Priority": "Priority", 
+                "📌 Stav úkolu": "Stav úkolu",
+                "👤 Reporter": "Reporter",
+                "💻 Resolver IT": "Resolver IT",
+                "📞 Resolver TP": "Resolver TP"
+            }
             
-            # --- Vykreslení KPI ---
-            st.markdown(f"### 📈 Klíčové metriky (Zobrazeno {len(filtered_df)} z {len(current_df)} řádků)")
+            # Vykreslení (Datum + Tyto sloupce)
+            filters = render_standard_filters(df, hl_bo_cols)
             
-            kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+            # Aplikace filtrů (Datum + zbytek jako kwargs)
+            kwargs_filters = {k: v for k, v in filters.items() if k != "date_range"}
             
-            with kpi_col1:
-                st.metric(label="Počet řádků", value=kpis["row_count"])
-            
-            with kpi_col2:
-                val = kpis["avg_activities"]
-                if val is not None:
-                    st.metric(label="Prům. počet aktivit", value=val, help="Průměrný počet aktivit na jeden ticket.")
-                else:
-                    st.metric(label="Prům. počet aktivit", value="N/A")
+            filtered_df = filter_data(
+                df,
+                date_range=filters.get("date_range"),
+                **kwargs_filters
+            )
 
-            with kpi_col3:
-                val = kpis["avg_response_time"]
-                if val is not None:
-                    st.metric(label="Prům. doba 1. odp.", value=val)
-                else:
-                    st.metric(label="Prům. doba 1. odp.", value="N/A")
-
-            with kpi_col4:
-                val = kpis["avg_client_reaction"]
-                if val is not None:
-                    st.metric(label="Prům. reakce klienta", value=val)
-                else:
-                    st.metric(label="Prům. reakce klienta", value="N/A")
+        # --- C) ZÁSILKY (PACKAGES) ---
+        elif selected_agenda == "Zásilky":
+            # Jen datum
+            # Tady se funkce render_standard_filters postará o nalezení sloupce s datem
+            filters = render_standard_filters(df, {}) 
             
-            st.divider()
+            filtered_df = filter_data(
+                df,
+                date_range=filters.get("date_range")
+            )
 
-            # --- Vykreslení Tabulky ---
-            st.markdown(f"**Detailní data:** `{selected_file}`")
-            
-            if not filtered_df.empty:
-                calculated_height = (len(filtered_df) + 1) * 35 + 3
-                table_height = min(calculated_height, 800)
-
-                st.data_editor(
-                    filtered_df,
-                    use_container_width=True,
-                    height=table_height,
-                    num_rows="dynamic",
-                    key=f"editor_{selected_file}"
-                )
-            else:
-                st.warning("⚠️ Pro zvolené filtry nebyla nalezena žádná data.")
-    
+    # --- VÝSLEDKY ---
+    if selected_agenda == "Daktela":
+        kpis = calculate_kpis(filtered_df)
+        st.markdown(f"### 📈 Metriky ({len(filtered_df)} / {len(df)})")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Počet ticketů", kpis["row_count"])
+        c2.metric("Aktivity/ticket", kpis["avg_activities"] or "N/A")
+        c3.metric("Doba 1. odp.", kpis["avg_response_time"] or "N/A")
+        c4.metric("Reakce klienta", kpis["avg_client_reaction"] or "N/A")
     else:
-        st.info("👋 Zatím nejsou nahrána žádná data. Použijte tlačítko výše.")
+        # Pro ostatní zatím jen počet
+        st.markdown(f"### 📈 Přehled ({len(filtered_df)} / {len(df)})")
+        st.metric("Počet záznamů", len(filtered_df))
+
+    st.divider()
+    st.markdown(f"**Data:** `{st.session_state.datasets[selected_agenda]['filename']}`")
+    
+    if not filtered_df.empty:
+        st.data_editor(filtered_df, use_container_width=True, height=600, key=f"table_{selected_agenda}")
+    else:
+        st.warning("⚠️ Žádná data neodpovídají filtrům.")
