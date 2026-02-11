@@ -107,12 +107,36 @@ def render_statistics():
                 else:
                     st.info("Sloupec 'Vytvořeno' chybí.")
 
-                # 2. Filtr Statusy
+                # 2. Filtr Statusy (OPRAVENO: ROZSEKÁNÍ KOMBINACÍ)
                 selected_statuses = None
                 if "Statusy" in current_df.columns:
-                    unique_statuses = sorted(current_df["Statusy"].dropna().unique().astype(str))
-                    st.subheader("📌 Statusy")
-                    selected_statuses = st.multiselect("Vyberte:", unique_statuses, default=unique_statuses)
+                    try:
+                        # 1. Vezmeme všechny hodnoty, zahodíme prázdné, převedeme na string
+                        raw_statuses = current_df["Statusy"].dropna().astype(str)
+                        
+                        # 2. Vytvoříme množinu (set) pro unikátní hodnoty
+                        unique_statuses_set = set()
+                        
+                        for row_val in raw_statuses:
+                            # Rozdělíme podle čárky (např. "Open, VIP" -> ["Open", " VIP"])
+                            parts = row_val.split(',')
+                            for part in parts:
+                                # Očistíme od mezer (např. " VIP" -> "VIP") a přidáme
+                                clean_status = part.strip()
+                                if clean_status: # Abychom nepřidali prázdný string
+                                    unique_statuses_set.add(clean_status)
+                        
+                        # 3. Seřadíme
+                        unique_statuses = sorted(list(unique_statuses_set))
+                        
+                        st.subheader("📌 Statusy")
+                        selected_statuses = st.multiselect(
+                            "Vyberte:", 
+                            unique_statuses, 
+                            default=unique_statuses
+                        )
+                    except Exception as e:
+                        st.warning(f"Chyba při načítání statusů: {e}")
                 else:
                     st.info("Sloupec 'Statusy' chybí.")
 

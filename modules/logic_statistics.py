@@ -21,7 +21,7 @@ def format_human_time(seconds):
         m, s = divmod(remainder, 60)
         return f"{h} h {m} m"
 
-# ZMĚNA: Přidána funkce pro filtrování dat podle požadavků
+# ZMĚNA: Přidán import re, pokud by byl potřeba, ale zvládneme to i bez něj
 def filter_data(df, date_range=None, status_list=None, vip_list=None, category_list=None):
     """
     Filtruje DataFrame podle zadaných parametrů.
@@ -29,25 +29,29 @@ def filter_data(df, date_range=None, status_list=None, vip_list=None, category_l
     """
     filtered_df = df.copy()
 
-    # 1. Filtrace podle Data (sloupec "Vytvořeno")
+    # 1. Filtrace podle Data (Vytvořeno)
     if date_range and len(date_range) == 2 and "Vytvořeno" in filtered_df.columns:
-        # Převedeme na datetime, ignorujeme chyby (coerce)
         filtered_df["Vytvořeno_dt"] = pd.to_datetime(filtered_df["Vytvořeno"], errors='coerce')
-        
         start_date = pd.to_datetime(date_range[0])
-        end_date = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1) # Zahrnout celý konečný den
+        end_date = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
         
-        # Aplikace filtru
         filtered_df = filtered_df[
             (filtered_df["Vytvořeno_dt"] >= start_date) & 
             (filtered_df["Vytvořeno_dt"] <= end_date)
         ]
-        # Úklid pomocného sloupce
         filtered_df = filtered_df.drop(columns=["Vytvořeno_dt"])
 
-    # 2. Filtrace podle Statusů
+    # 2. Filtrace podle Statusů (OPRAVENO PRO KOMBINACE)
     if status_list and "Statusy" in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df["Statusy"].isin(status_list)]
+        # Původní kód: filtered_df = filtered_df[filtered_df["Statusy"].isin(status_list)]
+        
+        # Nový kód:
+        # 1. Převedeme sloupec na string
+        # 2. Pro každý řádek zjistíme, jestli se v něm (po rozdělení čárkou) nachází NĚKTERÝ z vybraných statusů
+        mask = filtered_df["Statusy"].astype(str).apply(
+            lambda x: any(s.strip() in status_list for s in x.split(','))
+        )
+        filtered_df = filtered_df[mask]
 
     # 3. Filtrace podle VIP
     if vip_list and "VIP" in filtered_df.columns:
