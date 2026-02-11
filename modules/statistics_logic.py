@@ -1,4 +1,5 @@
 import pandas as pd
+import streamlit as st # Potřeba pro cache, pokud bychom optimalizovali, ale zde stačí pro logiku
 
 def format_human_time(seconds):
     """
@@ -20,6 +21,44 @@ def format_human_time(seconds):
         m, s = divmod(remainder, 60)
         return f"{h} h {m} m"
 
+# ZMĚNA: Přidána funkce pro filtrování dat podle požadavků
+def filter_data(df, date_range=None, status_list=None, vip_list=None, category_list=None):
+    """
+    Filtruje DataFrame podle zadaných parametrů.
+    Vrací vyfiltrovaný DataFrame.
+    """
+    filtered_df = df.copy()
+
+    # 1. Filtrace podle Data (sloupec "Vytvořeno")
+    if date_range and len(date_range) == 2 and "Vytvořeno" in filtered_df.columns:
+        # Převedeme na datetime, ignorujeme chyby (coerce)
+        filtered_df["Vytvořeno_dt"] = pd.to_datetime(filtered_df["Vytvořeno"], errors='coerce')
+        
+        start_date = pd.to_datetime(date_range[0])
+        end_date = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1) # Zahrnout celý konečný den
+        
+        # Aplikace filtru
+        filtered_df = filtered_df[
+            (filtered_df["Vytvořeno_dt"] >= start_date) & 
+            (filtered_df["Vytvořeno_dt"] <= end_date)
+        ]
+        # Úklid pomocného sloupce
+        filtered_df = filtered_df.drop(columns=["Vytvořeno_dt"])
+
+    # 2. Filtrace podle Statusů
+    if status_list and "Statusy" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["Statusy"].isin(status_list)]
+
+    # 3. Filtrace podle VIP
+    if vip_list and "VIP" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["VIP"].isin(vip_list)]
+
+    # 4. Filtrace podle Kategorie
+    if category_list and "Kategorie" in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df["Kategorie"].isin(category_list)]
+
+    return filtered_df
+
 def calculate_kpis(df):
     """
     Vypočítá klíčové statistiky z DataFrame.
@@ -32,6 +71,9 @@ def calculate_kpis(df):
         "avg_client_reaction": None     # Průměrná reakce klienta
     }
     
+    if df.empty:
+        return stats
+
     # 1. Průměrný počet aktivit
     if "Počet aktivit" in df.columns:
         # errors='coerce' změní nečíselné hodnoty na NaN

@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from modules.statistics_logic import calculate_kpis
+# ZMĚNA: Import nové funkce filter_data
+from modules.statistics_logic import calculate_kpis, filter_data 
 
 def render_statistics():
     # --- 1. CSS ÚPRAVA (Excel mód vždy zapnutý + oprava useknutého vršku) ---
@@ -20,7 +21,7 @@ def render_statistics():
     if 'uploaded_data' not in st.session_state:
         st.session_state.uploaded_data = {}
     
-    # ZMĚNA: Inicializace klíče pro resetování uploaderu
+    # Inicializace klíče pro resetování uploaderu
     if 'uploader_key' not in st.session_state:
         st.session_state.uploader_key = 0
 
@@ -38,7 +39,6 @@ def render_statistics():
     # --- Sekce pro nahrání souborů ---
     st.markdown("### 📤 Správa dat")
     
-    # ZMĚNA: Přidán dynamický klíč 'key=f"uploader_{...}"', který zajistí vyprázdnění komponenty při smazání
     uploaded_files = st.file_uploader(
         "📂 Klikněte pro výběr souborů nebo je přetáhněte sem (CSV, Excel)", 
         type=['csv', 'xlsx', 'xls'], 
@@ -75,18 +75,90 @@ def render_statistics():
         with col_actions:
             if st.button("🗑️ Smazat vše", use_container_width=True):
                 st.session_state.uploaded_data = {}
-                # ZMĚNA: Inkrementace klíče donutí file_uploader k resetu (zahození cache souborů)
                 st.session_state.uploader_key += 1
                 st.rerun()
 
         if selected_file in st.session_state.uploaded_data:
             current_df = st.session_state.uploaded_data[selected_file]
             
-            # --- VÝPOČET KPI ---
-            kpis = calculate_kpis(current_df)
+            # --- ZMĚNA: SIDEBAR FILTRY ---
+            with st.sidebar:
+                st.header("🔍 Filtrování dat")
+                st.write(f"**Soubor:** {selected_file}")
+                st.divider()
+
+                # 1. Filtr Datum (Vytvořeno)
+                selected_date_range = None
+                if "Vytvořeno" in current_df.columns:
+                    try:
+                        # Konverze pro zjištění min/max data
+                        temp_dates = pd.to_datetime(current_df["Vytvořeno"], errors='coerce').dropna()
+                        if not temp_dates.empty:
+                            min_date = temp_dates.min().date()
+                            max_date = temp_dates.max().date()
+                            
+                            st.subheader("📅 Datum vytvoření")
+                            selected_date_range = st.date_input(
+                                "Vyberte rozsah:",
+                                value=(min_date, max_date),
+                                min_value=min_date,
+                                max_value=max_date,
+                                help="Zvolte počáteční a koncové datum."
+                            )
+                    except Exception:
+                        st.warning("Nepodařilo se načíst data pro filtr času.")
+
+                # 2. Filtr Statusy
+                selected_statuses = None
+                if "Statusy" in current_df.columns:
+                    unique_statuses = sorted(current_df["Statusy"].dropna().unique().astype(str))
+                    st.subheader("📌 Statusy")
+                    selected_statuses = st.multiselect(
+                        "Vyberte statusy:",
+                        options=unique_statuses,
+                        default=unique_statuses, # Ve výchozím stavu vše
+                        placeholder="Zvolte statusy..."
+                    )
+
+                # 3. Filtr VIP
+                selected_vip = None
+                if "VIP" in current_df.columns:
+                    unique_vip = sorted(current_df["VIP"].dropna().unique().astype(str))
+                    st.subheader("⭐ VIP")
+                    selected_vip = st.multiselect(
+                        "Filtr VIP:",
+                        options=unique_vip,
+                        default=unique_vip,
+                        placeholder="Zvolte typ (VIP/ne-VIP)..."
+                    )
+
+                # 4. Filtr Kategorie
+                selected_categories = None
+                if "Kategorie" in current_df.columns:
+                    unique_cats = sorted(current_df["Kategorie"].dropna().unique().astype(str))
+                    st.subheader("📂 Kategorie")
+                    selected_categories = st.multiselect(
+                        "Vyberte kategorie:",
+                        options=unique_cats,
+                        default=unique_cats,
+                        placeholder="Zvolte kategorie..."
+                    )
+            
+            # --- ZMĚNA: APLIKACE FILTRU NA DATA ---
+            # Voláme logiku pro filtrování
+            filtered_df = filter_data(
+                current_df, 
+                date_range=selected_date_range,
+                status_list=selected_statuses,
+                vip_list=selected_vip,
+                category_list=selected_categories
+            )
+
+            # --- VÝPOČET KPI (z filtrovaných dat) ---
+            kpis = calculate_kpis(filtered_df)
             
             # --- Vykreslení KPI karet (4 sloupce) ---
-            st.markdown("### 📈 Klíčové metriky")
+            st.markdown(f"### 📈 Klíčové metriky (Zobrazeno {len(filtered_df)} z {len(current_df)} řádků)")
             
             kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
             
@@ -100,7 +172,7 @@ def render_statistics():
                 if val is not None:
                     st.metric(label="Prům. počet aktivit", value=val, help="Průměrný počet aktivit na jeden ticket.")
                 else:
-                    st.metric(label="Prům. počet aktivit", value="N/A", help="⚠️ Data nejsou k dispozici. V souboru chybí sloupec 'Počet aktivit'.")
+                    st.metric(label="Prům. počet aktivit", value="N/A", help="⚠️ Data nejsou k dispozici.")
 
             # 3. Průměrná doba první odpovědi
             with kpi_col3:
@@ -108,7 +180,7 @@ def render_statistics():
                 if val is not None:
                     st.metric(label="Prům. doba 1. odp.", value=val, help="Průměrný čas od vytvoření ticketu do první odpovědi operátora.")
                 else:
-                    st.metric(label="Prům. doba 1. odp.", value="N/A", help="⚠️ Data nejsou k dispozici. V souboru chybí sloupec 'Doba první odpovědi'.")
+                    st.metric(label="Prům. doba 1. odp.", value="N/A", help="⚠️ Data nejsou k dispozici.")
 
             # 4. Průměrná reakce klienta
             with kpi_col4:
@@ -116,26 +188,26 @@ def render_statistics():
                 if val is not None:
                     st.metric(label="Prům. reakce klienta", value=val, help="Průměrný čas, za který klient odpoví na zprávu operátora.")
                 else:
-                    st.metric(label="Prům. reakce klienta", value="N/A", help="⚠️ Data nejsou k dispozici. Chybí potřebné sloupce časů nebo nebyla nalezena žádná reakce klienta po operátorovi.")
+                    st.metric(label="Prům. reakce klienta", value="N/A", help="⚠️ Data nejsou k dispozici.")
             
             st.divider()
 
-            # --- Vykreslení Tabulky (Bez slideru) ---
+            # --- Vykreslení Tabulky (Filtrovaná data) ---
             st.markdown(f"**Detailní data:** `{selected_file}`")
             
-            # ZMĚNA: Omezení maximální výšky na 800px. 
-            # Příliš vysoké hodnoty (50000) způsobují chyby vykreslování (tabulka zmizí).
-            # Nyní se zobrazí scrollbar uvnitř tabulky, pokud je dat hodně.
-            calculated_height = (len(current_df) + 1) * 35 + 3
-            table_height = min(calculated_height, 800)
+            if not filtered_df.empty:
+                calculated_height = (len(filtered_df) + 1) * 35 + 3
+                table_height = min(calculated_height, 800)
 
-            st.data_editor(
-                current_df,
-                use_container_width=True,
-                height=table_height,
-                num_rows="dynamic",
-                key=f"editor_{selected_file}"
-            )
+                st.data_editor(
+                    filtered_df, # Zde posíláme filtrovaný DF
+                    use_container_width=True,
+                    height=table_height,
+                    num_rows="dynamic",
+                    key=f"editor_{selected_file}"
+                )
+            else:
+                st.warning("⚠️ Pro zvolené filtry nebyla nalezena žádná data.")
     
     else:
         st.info("👋 Zatím nejsou nahrána žádná data. Použijte tlačítko výše.")
