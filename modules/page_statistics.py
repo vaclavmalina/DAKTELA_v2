@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-# ZMĚNA: Import z nově přejmenovaného souboru 'logic_statistics.py'
 from modules.logic_statistics import calculate_kpis, filter_data 
 
 # --- HELPER FUNKCE PRO TLAČÍTKA VŠE/NIC ---
@@ -22,10 +21,35 @@ def render_statistics():
                 padding-right: 1rem !important;
                 padding-bottom: 1rem !important;
             }
-            /* Zmenšení mezer mezi tlačítky v sidebaru */
-            .stButton button {
-                padding: 0.25rem 0.5rem;
-                font-size: 0.8rem;
+            
+            /* --- STYLOVÁNÍ TLAČÍTEK 'VŠE' a 'NIC' V SIDEBARU --- */
+            /* Cílíme pouze na tlačítka uvnitř horizontálních bloků (sloupců) v sidebaru */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
+                background-color: transparent !important;
+                border: 1px solid rgba(49, 51, 63, 0.2) !important;
+                color: rgba(49, 51, 63, 0.6) !important;
+                font-size: 12px !important;
+                font-weight: 400 !important;
+                padding: 2px 10px !important;
+                min-height: 0px !important;
+                height: 28px !important;
+                line-height: 1.2 !important;
+                border-radius: 4px !important;
+                box-shadow: none !important;
+                transition: all 0.2s ease;
+            }
+
+            /* Hover efekt pro tato malá tlačítka */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:hover {
+                border-color: #FF4B4B !important;
+                color: #FF4B4B !important;
+                background-color: rgba(255, 75, 75, 0.05) !important;
+            }
+
+            /* Odstranění otravného červeného okraje při kliknutí (focus) */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button:focus {
+                box-shadow: none !important;
+                border-color: #FF4B4B !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -108,14 +132,15 @@ def render_statistics():
                             min_date = temp_dates.min().date()
                             max_date = temp_dates.max().date()
                             
-                            st.subheader("📅 Datum (Posuvník)")
-                            # Pokud je jen jedno datum, slider nefunguje jako range, ošetříme to
+                            st.subheader("📅 Datum (Období)")
+                            
                             if min_date == max_date:
-                                st.info(f"Data jsou pouze ze dne: {min_date}")
+                                st.info(f"Data pouze z: {min_date}")
                                 selected_date_range = (min_date, max_date)
                             else:
+                                # Použití slideru místo kalendáře
                                 selected_date_range = st.slider(
-                                    "Vyberte období:",
+                                    "Vyberte rozsah:",
                                     min_value=min_date,
                                     max_value=max_date,
                                     value=(min_date, max_date),
@@ -130,11 +155,11 @@ def render_statistics():
 
                 # --- 2. Filtr Statusy ---
                 selected_statuses = None
-                status_match_mode = 'any' # Default
+                status_match_mode = 'any'
 
                 if "Statusy" in current_df.columns:
                     try:
-                        # Extrakt unikátních statusů + ŘAZENÍ A-Z
+                        # Získání unikátních statusů (rozsekání podle čárky)
                         raw_statuses = current_df["Statusy"].dropna().astype(str)
                         unique_statuses_set = set()
                         for row_val in raw_statuses:
@@ -143,25 +168,26 @@ def render_statistics():
                                 clean_status = part.strip()
                                 if clean_status: unique_statuses_set.add(clean_status)
                         
+                        # ŘAZENÍ A-Z
                         unique_statuses = sorted(list(unique_statuses_set))
                         
                         st.subheader("📌 Statusy")
                         
-                        # Tlačítka Vše / Nic
+                        # Tlačítka Vše / Nic (S novým designem)
                         c1, c2 = st.columns(2)
-                        if c1.button("✅ Vše", key="stat_all"): select_all("filter_statuses", unique_statuses)
-                        if c2.button("❌ Nic", key="stat_none"): clear_all("filter_statuses")
+                        c1.button("Vše", key="stat_all", on_click=select_all, args=("filter_statuses", unique_statuses), use_container_width=True)
+                        c2.button("Nic", key="stat_none", on_click=clear_all, args=("filter_statuses",), use_container_width=True)
 
-                        # Multiselect s klíčem v session state
+                        # Multiselect (s klíčem pro ovládání tlačítky)
                         selected_statuses = st.multiselect(
-                            "Vyberte:", 
+                            "Vyberte statusy:", 
                             unique_statuses, 
-                            default=unique_statuses, # Defaultně vše, nebo prázdné list, dle preference
+                            default=unique_statuses,
                             key="filter_statuses"
                         )
 
                         # Volba logiky hledání
-                        st.caption("Režim hledání:")
+                        st.caption("Logika hledání:")
                         mode_selection = st.radio(
                             "Režim statusů",
                             options=["Obsahuje alespoň jeden", "Přesná shoda kombinace"],
@@ -184,11 +210,11 @@ def render_statistics():
                     st.subheader("⭐ VIP")
                     
                     c1, c2 = st.columns(2)
-                    if c1.button("✅ Vše", key="vip_all"): select_all("filter_vip", unique_vip)
-                    if c2.button("❌ Nic", key="vip_none"): clear_all("filter_vip")
+                    c1.button("Vše", key="vip_all", on_click=select_all, args=("filter_vip", unique_vip), use_container_width=True)
+                    c2.button("Nic", key="vip_none", on_click=clear_all, args=("filter_vip",), use_container_width=True)
 
                     selected_vip = st.multiselect(
-                        "Vyberte:", 
+                        "Vyberte VIP:", 
                         unique_vip, 
                         default=unique_vip,
                         key="filter_vip"
@@ -203,24 +229,25 @@ def render_statistics():
                     st.subheader("📂 Kategorie")
 
                     c1, c2 = st.columns(2)
-                    if c1.button("✅ Vše", key="cat_all"): select_all("filter_cat", unique_cats)
-                    if c2.button("❌ Nic", key="cat_none"): clear_all("filter_cat")
+                    c1.button("Vše", key="cat_all", on_click=select_all, args=("filter_cat", unique_cats), use_container_width=True)
+                    c2.button("Nic", key="cat_none", on_click=clear_all, args=("filter_cat",), use_container_width=True)
 
                     selected_categories = st.multiselect(
-                        "Vyberte:", 
+                        "Vyberte kategorie:", 
                         unique_cats, 
                         default=unique_cats,
                         key="filter_cat"
                     )
 
             # --- APLIKACE FILTRU NA DATA ---
+            # Zde voláme funkci z logic_statistics.py
             filtered_df = filter_data(
                 current_df, 
                 date_range=selected_date_range,
                 status_list=selected_statuses,
                 vip_list=selected_vip,
                 category_list=selected_categories,
-                status_match_mode=status_match_mode # Posíláme novou logiku
+                status_match_mode=status_match_mode
             )
 
             # --- VÝPOČET KPI ---
