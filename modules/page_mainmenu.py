@@ -13,7 +13,7 @@ def render_main_menu():
         {"label": "📈\nDashboard",       "action": "Dashboard"},
         {"label": "📑\nReporting",       "action": "Reporting"},
         {"label": "👥\nUživatelé",       "action": "Uživatelé"},
-        {"label": "🗄️\Stažení dat",          "action": "a_datadownload"},
+        {"label": "🗄️\nStažení dat",     "action": "a_downloader"},
         {"label": "⚙️\nNastavení",       "action": "Nastavení"},
         {"label": "❓\nNápověda",        "action": "Nápověda"},
     ]
@@ -25,7 +25,6 @@ def render_main_menu():
         cols = st.columns(3)
         for idx, item in enumerate(row):
             with cols[idx]:
-                # Přidán parametr 'key', aby Streamlit bezpečně rozeznal každé tlačítko
                 if st.button(item["label"], use_container_width=True, key=f"menu_btn_{item['action']}"):
                     
                     # 1. HARVESTER
@@ -33,22 +32,18 @@ def render_main_menu():
                         st.session_state.current_app = "harvester"
                         st.rerun()
                     
-                    # 2. STATISTIKY (směruje na page_statistics)
+                    # 2. STATISTIKY (WIP - pokud nemáš page_statistics.py)
                     elif item["action"] == "a_statistics":
-                        st.session_state.current_app = "statistics"
-                        st.rerun()
+                        # st.session_state.current_app = "statistics"
+                        show_wip_msg("Statistiky")
+                        # st.rerun()
 
-                    # 3. Databáze (směruje na page_dbupdate)
-                    elif item["action"] == "a_db_update":
-                        st.session_state.current_app = "db_update"
-                        st.rerun()
-
-                     # 4. Data (směruje na page_datadownload)
-                    elif item["action"] == "a_datadownload":
-                        st.session_state.current_app = "datadownload"
+                    # 3. DOWNLOADER - Stažení dat
+                    elif item["action"] == "a_downloader":
+                        st.session_state.current_app = "downloader"
                         st.rerun()
                         
-                    # OSTATNÍ (Zatím nefunkční)
+                    # OSTATNÍ
                     else:
                         show_wip_msg(item["action"])
-        st.write("") # Mezera mezi řádky
+        st.write("")
