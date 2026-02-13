@@ -7,13 +7,13 @@ def render_main_menu():
     st.markdown("<h1 style='text-align: center; margin-bottom: 75px;'>Balíkobot - Datio</h1>", unsafe_allow_html=True)
 
     menu_items = [
-        {"label": "🔎\nAnalýza ticketů", "action": "harvester"},
-        {"label": "📊\nStatistiky",      "action": "Statistiky"},
-        {"label": "🔄\nStažení dat",     "action": "Stažení dat"},
+        {"label": "🔎\nAnalýza ticketů", "action": "a_harvester"},
+        {"label": "📊\nStatistiky",      "action": "a_statistics"},
+        {"label": "🔄\nDatabáze",     "action": "a_db_update"},
         {"label": "📈\nDashboard",       "action": "Dashboard"},
         {"label": "📑\nReporting",       "action": "Reporting"},
         {"label": "👥\nUživatelé",       "action": "Uživatelé"},
-        {"label": "🗄️\nArchiv",          "action": "Archiv"},
+        {"label": "🗄️\Stažení dat",          "action": "a_datadownload"},
         {"label": "⚙️\nNastavení",       "action": "Nastavení"},
         {"label": "❓\nNápověda",        "action": "Nápověda"},
     ]
@@ -29,18 +29,23 @@ def render_main_menu():
                 if st.button(item["label"], use_container_width=True, key=f"menu_btn_{item['action']}"):
                     
                     # 1. HARVESTER
-                    if item["action"] == "harvester":
+                    if item["action"] == "a_harvester":
                         st.session_state.current_app = "harvester"
                         st.rerun()
                     
                     # 2. STATISTIKY (směruje na page_statistics)
-                    elif item["action"] == "Statistiky":
+                    elif item["action"] == "a_statistics":
                         st.session_state.current_app = "statistics"
                         st.rerun()
 
-                    # 3. STAŽENÍ DAT (směruje na page_dbupdate)
-                    elif item["action"] == "Stažení dat":
+                    # 3. Databáze (směruje na page_dbupdate)
+                    elif item["action"] == "a_db_update":
                         st.session_state.current_app = "db_update"
+                        st.rerun()
+
+                     # 4. Data (směruje na page_datadownload)
+                    elif item["action"] == "a_datadownload":
+                        st.session_state.current_app = "datadownload"
                         st.rerun()
                         
                     # OSTATNÍ (Zatím nefunkční)
