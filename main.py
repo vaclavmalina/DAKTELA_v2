@@ -1,12 +1,12 @@
 import streamlit as st
+# Importujeme moduly
 from modules import page_harvester
 from modules import page_mainmenu
-from modules import page_downloader
-from modules import page_statistics
+from modules import page_downloader  # DŮLEŽITÉ: Import nového modulu
 
 # --- HLAVNÍ KONFIGURACE UI ---
 st.set_page_config(
-    page_title="Balíkobot - Datio",
+    page_title="Balíkobot Data Centrum",
     layout="centered",
     initial_sidebar_state="collapsed",
     page_icon="🧊"
@@ -28,7 +28,6 @@ st.markdown("""
             transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             border-color: #FF4B4B; color: #FF4B4B; background-color: #fff5f5;
         }
-        h1 { margin-bottom: 2rem; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -53,21 +52,26 @@ if not st.session_state.authenticated:
             st.error("Nesprávné heslo.")
     st.stop()
 
-# --- APLIKACE (ROZCESTNÍK) ---
-# Voláme funkce z naimportovaných modulů s prefixem page_
+# --- ROUTOVÁNÍ APLIKACE ---
+
 if st.session_state.current_app == "main_menu":
     page_mainmenu.render_main_menu()
 
 elif st.session_state.current_app == "harvester":
     page_harvester.render_harvester()
 
-elif st.session_state.current_app == "datadownload":
-    # Tady voláme funkci z page_downloader.py
-    page_downloader.render_downloader()
-
-# Pro ostatní zatím WIP nebo přesměrování
-else:
-    st.info(f"Modul {st.session_state.current_app} je ve vývoji.")
+elif st.session_state.current_app == "statistics":
+    # Pokud máš modul page_statistics, použij: page_statistics.render_statistics()
+    st.info("Statistiky jsou ve vývoji.")
     if st.button("Zpět"):
         st.session_state.current_app = "main_menu"
         st.rerun()
+
+# DŮLEŽITÉ: Obsluha stránky pro stažení dat
+elif st.session_state.current_app == "datadownload":
+    page_downloader.render_downloader()
+
+# Fallback pro neznámé stavy
+else:
+    st.session_state.current_app = "main_menu"
+    st.rerun()
