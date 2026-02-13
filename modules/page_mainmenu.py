@@ -1,53 +1,36 @@
 import streamlit as st
 
-def show_wip_msg(module_name):
-    st.toast(f"🚧 Modul **{module_name}** je momentálně ve vývoji.", icon="🛠️")
+def show_wip(name):
+    st.toast(f"🚧 Modul {name} je ve vývoji.", icon="🛠️")
 
 def render_main_menu():
-    st.markdown("<h1 style='text-align: center; margin-bottom: 75px;'>Balíkobot - Datio</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-bottom: 50px;'>Balíkobot - Datio</h1>", unsafe_allow_html=True)
 
-    menu_items = [
-        {"label": "🔎\nAnalýza ticketů", "action": "a_harvester"},
-        {"label": "📊\nStatistiky",      "action": "a_statistics"},
-        {"label": "🔄\nDatabáze",        "action": "a_db_update"},
-        {"label": "📈\nDashboard",       "action": "Dashboard"},
-        {"label": "📑\nReporting",       "action": "Reporting"},
-        {"label": "👥\nUživatelé",       "action": "Uživatelé"},
-        {"label": "🗄️\nStažení dat",     "action": "a_datadownload"},
-        {"label": "⚙️\nNastavení",       "action": "Nastavení"},
-        {"label": "❓\nNápověda",        "action": "Nápověda"},
+    # Definice menu - DŮLEŽITÉ: 'id' musí odpovídat podmínkám v main.py
+    menu = [
+        {"label": "🔎\nAnalýza ticketů", "id": "harvester"},
+        {"label": "📊\nStatistiky",      "id": "statistics"},
+        {"label": "🔄\nDatabáze",        "id": "db_update"},
+        {"label": "🗄️\nStažení dat",     "id": "downloader"},
+        {"label": "📈\nDashboard",       "id": "dashboard_wip"},
+        {"label": "📑\nReporting",       "id": "reporting_wip"},
+        {"label": "👥\nUživatelé",       "id": "users_wip"},
+        {"label": "⚙️\nNastavení",       "id": "settings_wip"},
+        {"label": "❓\nNápověda",        "id": "help_wip"},
     ]
 
-    rows = [menu_items[i:i+3] for i in range(0, len(menu_items), 3)]
-    
+    # Vykreslení mřížky 3x3
+    rows = [menu[i:i+3] for i in range(0, len(menu), 3)]
     for row in rows:
         cols = st.columns(3)
         for idx, item in enumerate(row):
             with cols[idx]:
-                # Unikátní klíč pro každé tlačítko
-                if st.button(item["label"], use_container_width=True, key=f"menu_btn_{item['action']}"):
+                if st.button(item["label"], use_container_width=True, key=f"btn_{item['id']}"):
                     
-                    # 1. HARVESTER
-                    if item["action"] == "a_harvester":
-                        st.session_state.current_app = "harvester"
+                    # Logika přepnutí
+                    if item["id"] in ["harvester", "statistics", "db_update", "downloader"]:
+                        st.session_state.current_app = item["id"]
                         st.rerun()
-                    
-                    # 2. STATISTIKY (OPRAVENO)
-                    elif item["action"] == "a_statistics":
-                        st.session_state.current_app = "statistics"
-                        st.rerun()
-
-                    # 3. DATABÁZE (OPRAVENO)
-                    elif item["action"] == "a_db_update":
-                        st.session_state.current_app = "db_update"
-                        st.rerun()
-
-                    # 4. DOWNLOADER
-                    elif item["action"] == "a_datadownload":
-                        st.session_state.current_app = "datadownload"
-                        st.rerun()
-                        
-                    # OSTATNÍ (Zobrazí WIP hlášku)
                     else:
-                        show_wip_msg(item["label"].replace("\n", " "))
+                        show_wip(item["label"].replace("\n", " "))
         st.write("")
