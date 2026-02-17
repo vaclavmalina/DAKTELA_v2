@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta, date
 import time
 from bs4 import BeautifulSoup
-import os  # PŘIDÁNO: Pro práci se složkami
+import os
 
 # --- KONFIGURACE ---
 try:
@@ -15,7 +15,6 @@ except:
     INSTANCE_URL = "" 
     ACCESS_TOKEN = ""
 
-# ZMĚNA: Cesta do složky 'data'
 DATA_DIR = "data"
 DB_FILE = os.path.join(DATA_DIR, "daktela_data.db")
 
@@ -33,8 +32,19 @@ def clean_daktela_html(html_content):
     for br in soup.find_all("br"): br.replace_with("\n")
     return "\n".join(line.strip() for line in soup.get_text(separator="\n").splitlines() if line.strip())
 
+def format_duration(seconds):
+    """Formátuje sekundy na čitelný čas (např. 1h 2m 3s)."""
+    seconds = int(seconds)
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    parts = []
+    if h > 0: parts.append(f"{h}h")
+    if m > 0: parts.append(f"{m}m")
+    parts.append(f"{s}s")
+    return " ".join(parts)
+
 def init_db():
-    ensure_data_dir() # Ujistíme se, že složka existuje
+    ensure_data_dir()
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
@@ -95,6 +105,19 @@ def get_db_ticket_map():
     except: return {}
     finally: conn.close()
 
+# ZMĚNA: Funkce pro zjištění posledního data v DB
+def get_last_ticket_date():
+    conn = init_db()
+    try:
+        # Vybereme nejnovější 'edited_at' datum
+        res = pd.read_sql("SELECT MAX(edited_at) as last_edit FROM tickets", conn)
+        if not res.empty and res.iloc[0]['last_edit']:
+            # Převedeme na objekt date
+            return pd.to_datetime(res.iloc[0]['last_edit']).date()
+    except: pass
+    finally: conn.close()
+    return None
+
 # --- CALLBACKY ---
 def set_date_range(d_from, d_to):
     st.session_state.db_date_from = d_from
@@ -111,13 +134,21 @@ def cb_this_week(): set_date_range(date.today() - timedelta(days=date.today().we
 def cb_yesterday(): set_date_range(date.today() - timedelta(days=1), date.today() - timedelta(days=1))
 def cb_today(): set_date_range(date.today(), date.today())
 
+# ZMĚNA: Callback pro navázání na poslední data
+def cb_incremental():
+    last_date = get_last_ticket_date()
+    if last_date:
+        set_date_range(last_date, date.today())
+        st.toast(f"Nastaveno datum od: {last_date}")
+    else:
+        st.toast("Databáze je prázdná, nelze navázat. Vyberte datum ručně.", icon="⚠️")
+
 # --- RENDER ---
 def render_db_update():
     if 'db_date_from' not in st.session_state: st.session_state.db_date_from = date.today() - timedelta(days=30)
     if 'db_date_to' not in st.session_state: st.session_state.db_date_to = date.today()
-    if 'db_cat_index' not in st.session_state: st.session_state.db_cat_index = 0
+    if 'db_cat_select' not in st.session_state: st.session_state.db_cat_select = []
 
-    # CSS (bez wrapování tlačítek)
     st.markdown("""<style>div.stButton > button {white-space: nowrap;}</style>""", unsafe_allow_html=True)
 
     # HEADER
@@ -126,76 +157,137 @@ def render_db_update():
         if st.button("⬅️ Menu", key="db_menu_btn"):
             st.session_state.current_app = "main_menu"; st.rerun()
     with col_title:
-        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>📥 Stažení dat</h2>", unsafe_allow_html=True)
+        # ZMĚNA: Nový nadpis
+        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>🔄 Aktualizace databáze</h2>", unsafe_allow_html=True)
     st.divider()
 
-    # KATEGORIE
+    # KATEGORIE - NAČTENÍ
     if 'categories' not in st.session_state:
         try:
             res = requests.get(f"{INSTANCE_URL}/api/v6/ticketsCategories.json", headers={'x-auth-token': ACCESS_TOKEN})
             st.session_state['categories'] = sorted(res.json().get('result', {}).get('data', []), key=lambda x: x.get('title', '').lower())
         except: pass
 
-    cat_map = {"VŠE (bez filtru)": "ALL"}
-    cat_map.update({c['title']: c['name'] for c in st.session_state.get('categories', [])})
+    cat_map = {c['title']: c['name'] for c in st.session_state.get('categories', [])}
 
     # INPUTY
-    st.info(f"Slouží pouze pro aktualizaci dat v databázi podle nastaveného filtru níže.") # Informace pro uživatele
-    c1, c2, c3 = st.columns(3)
+    st.info(f"Slouží pro stažení a synchronizaci záznamů z Daktely do lokální databáze.") 
+    
+    c1, c2 = st.columns(2)
     d_from = c1.date_input("Datum od (edited)", key="db_date_from")
     d_to = c2.date_input("Datum do (edited)", key="db_date_to")
-    cat_label = c3.selectbox("Kategorie", options=list(cat_map.keys()), index=st.session_state.db_cat_index)
-    st.session_state.db_cat_index = list(cat_map.keys()).index(cat_label)
     
-    # Tlačítka (Grid 4x2)
-    st.caption("Rychlý výběr:")
+    selected_cat_titles = st.multiselect(
+        "Kategorie (nevybráno = VŠE)", 
+        options=list(cat_map.keys()), 
+        key="db_cat_select",
+        help="Můžete vybrat více kategorií. Pokud nevyberete nic, stahují se všechny."
+    )
+    
+    # GRID TLAČÍTEK
+    st.caption("Rychlý výběr data:")
     r1 = st.columns(4); r2 = st.columns(4)
-    r1[0].button("Dnes", on_click=cb_today, use_container_width=True)
-    r1[1].button("Včera", on_click=cb_yesterday, use_container_width=True)
-    r1[2].button("Tento týden", on_click=cb_this_week, use_container_width=True)
-    r1[3].button("Tento měsíc", on_click=cb_this_month, use_container_width=True)
-    r2[0].button("Minulý měsíc", on_click=cb_last_month, use_container_width=True)
-    r2[1].button("Tento rok", on_click=cb_this_year, use_container_width=True)
-    r2[2].button("Minulý rok", on_click=cb_last_year, use_container_width=True)
+    # ZMĚNA: Přidání tlačítka pro inkrementální update jako první možnost
+    r1[0].button("Poslední aktualizace", on_click=cb_incremental, use_container_width=True, help="Nastaví datum 'Od' na poslední záznam v databázi.")
+    r1[1].button("Dnes", on_click=cb_today, use_container_width=True)
+    r1[2].button("Včera", on_click=cb_yesterday, use_container_width=True)
+    r1[3].button("Tento týden", on_click=cb_this_week, use_container_width=True)
+    
+    r2[0].button("Tento měsíc", on_click=cb_this_month, use_container_width=True)
+    r2[1].button("Minulý měsíc", on_click=cb_last_month, use_container_width=True)
+    r2[2].button("Tento rok", on_click=cb_this_year, use_container_width=True)
+    r2[3].button("Minulý rok", on_click=cb_last_year, use_container_width=True)
 
     st.divider()
 
+    # TLAČÍTKO START
     if st.button("🚀 Spustit synchronizaci", type="primary", use_container_width=True):
         if not ACCESS_TOKEN: st.error("Chybí token!"); st.stop()
-        status_box = st.status("Krok 1: Získávám seznam ticketů...", expanded=True)
-
-        params = {
+        
+        stop_placeholder = st.empty()
+        
+        # ZMĚNA: Status box nyní slouží jako kontejner pro log
+        status_box = st.status("Probíhá proces synchronizace...", expanded=True)
+        
+        # --- KROK 1 ---
+        status_box.write("⏳ **KROK 1:** Zjišťuji počet záznamů přes API (stránkování)...")
+        
+        api_tickets = []
+        skip = 0
+        take = 1000 
+        
+        base_params = {
             "filter[logic]": "and",
             "filter[filters][0][field]": "edited", "filter[filters][0][operator]": "gte", "filter[filters][0][value]": f"{d_from} 00:00:00",
             "filter[filters][1][field]": "edited", "filter[filters][1][operator]": "lte", "filter[filters][1][value]": f"{d_to} 23:59:59",
             "fields[0]": "name", "fields[1]": "title", "fields[2]": "created", "fields[3]": "edited", 
             "fields[4]": "category", "fields[5]": "user", "fields[6]": "statuses", "fields[7]": "customFields",
-            "take": 1000
+            "take": take
         }
-        if cat_map[cat_label] != "ALL":
-            params["filter[filters][2][field]"] = "category"
-            params["filter[filters][2][operator]"] = "eq"
-            params["filter[filters][2][value]"] = cat_map[cat_label]
+
+        if selected_cat_titles:
+            selected_ids = [cat_map[t] for t in selected_cat_titles]
+            base_params["filter[filters][2][field]"] = "category"
+            base_params["filter[filters][2][operator]"] = "in"
+            for idx, val in enumerate(selected_ids):
+                base_params[f"filter[filters][2][value][{idx}]"] = val
 
         try:
-            res = requests.get(f"{INSTANCE_URL}/api/v6/tickets.json", params=params, headers={"X-AUTH-TOKEN": ACCESS_TOKEN})
-            api_tickets = res.json().get("result", {}).get("data", [])
-            status_box.write(f"✅ API vrátilo {len(api_tickets)} záznamů.")
-        except Exception as e: status_box.update(label="❌ Chyba", state="error"); st.error(f"{e}"); st.stop()
+            while True:
+                if stop_placeholder.button("🛑 ZASTAVIT PROCES", key=f"stop_page_{skip}", type="secondary", use_container_width=True):
+                    status_box.update(label="🛑 Zastaveno uživatelem", state="error")
+                    st.stop()
 
-        status_box.write("Krok 2: Hledám změny...")
+                base_params["skip"] = skip
+                # Jen malá vizuální indikace uvnitř kroku
+                # status_box.write(f"&nbsp;&nbsp;&nbsp;➡️ Stahuji dávku: {skip}...")
+                
+                res = requests.get(f"{INSTANCE_URL}/api/v6/tickets.json", params=base_params, headers={"X-AUTH-TOKEN": ACCESS_TOKEN})
+                
+                if res.status_code != 200:
+                    status_box.update(label="❌ Chyba API", state="error"); st.error(f"API Error {res.status_code}: {res.text}"); st.stop()
+                
+                batch = res.json().get("result", {}).get("data", [])
+                
+                if not batch: break
+                api_tickets.extend(batch)
+                if len(batch) < take: break
+                skip += take
+                time.sleep(0.1)
+
+            status_box.write(f"✅ **KROK 1 HOTOVO:** Nalezeno **{len(api_tickets)}** záznamů v API.")
+            
+        except Exception as e: 
+            status_box.update(label="❌ Chyba", state="error"); st.error(f"{e}"); st.stop()
+
+        # --- KROK 2 ---
+        status_box.write("⏳ **KROK 2:** Porovnávám data s databází Balíkobotu...")
         db_map = get_db_ticket_map()
+        
         to_process = [t for t in api_tickets if t['name'] not in db_map or str(t['edited']) > str(db_map[t['name']])]
 
         if not to_process:
-            status_box.update(label="✅ Hotovo! Žádné změny.", state="complete", expanded=False); st.success("Databáze je aktuální."); st.stop()
+            stop_placeholder.empty()
+            status_box.write("✅ **KROK 2 HOTOVO:** Žádné nové změny k uložení.")
+            status_box.update(label="✅ Vše aktuální", state="complete", expanded=True)
+            st.success("Databáze je aktuální."); st.stop()
+        
+        status_box.write(f"✅ **KROK 2 HOTOVO:** Detekováno **{len(to_process)}** nových nebo změněných ticketů.")
 
-        status_box.write(f"🔍 Ke stažení: **{len(to_process)}** ticketů."); status_box.update(label="⬇️ Stahuji...", state="running", expanded=True)
+        # --- KROK 3 ---
+        status_box.write(f"⏳ **KROK 3:** Stahuji detaily a aktivity ({len(to_process)} ticketů)...")
         
         progress = st.progress(0); eta = st.empty()
         conn = init_db(); cur = conn.cursor(); start = time.time()
 
         for i, t in enumerate(to_process):
+            if stop_placeholder.button("🛑 ZASTAVIT PROCES", key=f"stop_row_{i}", type="secondary", use_container_width=True):
+                conn.commit()
+                conn.close()
+                status_box.update(label="🛑 Zastaveno uživatelem (data částečně uložena)", state="error")
+                st.toast("Proces byl zastaven. Stránka se obnoví.")
+                st.stop()
+
             t_id = t['name']
             
             # 1. KATEGORIE & USER
@@ -242,24 +334,20 @@ def render_db_update():
                 conn.commit()
             except: pass
 
-            # ETA
             elapsed = time.time() - start
             if i > 0:
-                rem = int((len(to_process) - i) * (elapsed / i))
-                eta.caption(f"⏱️ Zbývá cca: **{rem} s**")
+                rem_seconds = int((len(to_process) - i) * (elapsed / i))
+                eta_text = format_duration(rem_seconds)
+                eta.caption(f"⏱️ Zbývá cca: **{eta_text}**")
+            
             progress.progress((i + 1) / len(to_process)); time.sleep(0.05)
 
         conn.close()
-        status_box.update(label="🎉 Hotovo!", state="complete", expanded=False); st.success(f"Zpracováno {len(to_process)} ticketů.")
+        stop_placeholder.empty()
         
-        with st.expander("👀 Náhled dat (Statusy & Custom Fields)"):
-            conn = init_db()
-            st.dataframe(pd.read_sql("""
-                SELECT t.ticket_id, t.title, s.title as status, cf.field_name, cf.value
-                FROM tickets t
-                LEFT JOIN ticket_statuses ts ON t.ticket_id = ts.ticket_id
-                LEFT JOIN statuses s ON ts.status_id = s.status_id
-                LEFT JOIN ticket_custom_fields cf ON t.ticket_id = cf.ticket_id
-                ORDER BY t.edited_at DESC LIMIT 15
-            """, conn))
-            conn.close()
+        # --- KROK 4 ---
+        status_box.write("✅ **KROK 3 HOTOVO:** Data úspěšně stažena.")
+        status_box.update(label="🎉 Proces dokončen!", state="complete", expanded=True)
+        st.success(f"Hotovo! Databáze byla aktualizována o {len(to_process)} ticketů.")
+        
+        # ZMĚNA: Náhled dat odstraněn
