@@ -24,17 +24,28 @@ def format_human_time(seconds):
 def calculate_kpis(df):
     stats = {"row_count": len(df), "avg_activities": None, "avg_response_time": None}
     if df.empty: return stats
-    if "Počet aktivit" in df.columns:
-        avg_act = pd.to_numeric(df["Počet aktivit"], errors='coerce').mean()
+    col_act = next((c for c in df.columns if c in ["Počet aktivit", "activity_count"]), None)
+    col_resp = next((c for c in df.columns if c in ["Doba první odpovědi", "first_answer_duration"]), None)
+    if col_act:
+        avg_act = pd.to_numeric(df[col_act], errors='coerce').mean()
         stats["avg_activities"] = round(avg_act, 1) if not pd.isna(avg_act) else 0
-    if "Doba první odpovědi" in df.columns:
-        avg_resp = pd.to_numeric(df["Doba první odpovědi"], errors='coerce').mean()
+    if col_resp:
+        avg_resp = pd.to_numeric(df[col_resp], errors='coerce').mean()
         if not pd.isna(avg_resp): stats["avg_response_time"] = format_human_time(avg_resp)
     return stats
 
 def get_db_connection():
     if not os.path.exists(DB_PATH): return None
     return sqlite3.connect(DB_PATH)
+
+def get_all_tables():
+    conn = get_db_connection()
+    if not conn: return []
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return tables
 
 def load_data_from_db(agenda):
     conn = get_db_connection()
@@ -61,7 +72,6 @@ def load_data_from_db(agenda):
             df.rename(columns=rename_map, inplace=True)
             if "VIP" in df.columns:
                 df["VIP"] = df["VIP"].apply(lambda x: "→ VIP KLIENT ←" if x == 1 else "Standard")
-        
         elif agenda == "Aktivity":
             query = """
             SELECT a.*, q.title as 'Fronta', c.title as 'Kategorie'
@@ -71,17 +81,17 @@ def load_data_from_db(agenda):
             """
             df = pd.read_sql_query(query, conn)
             df.rename(columns={"type": "Typ", "direction": "Směr", "sender": "Odesílatel", "created_date": "Datum"}, inplace=True)
-        
         elif agenda == "Zásilky":
             try: df = pd.read_sql_query("SELECT * FROM shipments", conn)
             except: df = pd.DataFrame()
-        
         elif agenda == "Klienti":
             df = pd.read_sql_query("SELECT * FROM clients", conn)
             df.rename(columns={"title": "Název klienta", "client_type": "Typ klienta"}, inplace=True)
-        
-        else: df = pd.DataFrame()
-    except Exception as e: st.error(f"SQL Error: {e}"); df = pd.DataFrame()
+        else:
+            try: df = pd.read_sql_query(f"SELECT * FROM {agenda}", conn)
+            except: df = pd.DataFrame()
+    except Exception as e: 
+        st.error(f"SQL Error: {e}"); df = pd.DataFrame()
     finally: conn.close()
     return df
 
@@ -91,189 +101,146 @@ def generate_excel_report(df, kpis, chart=None, agenda_name="Report"):
         wb = writer.book
         ws_dash = wb.add_worksheet('Přehled')
         writer.sheets['Přehled'] = ws_dash
-        
         title_fmt = wb.add_format({'bold': True, 'font_size': 16, 'color': '#2c3e50'})
         bold_fmt = wb.add_format({'bold': True, 'font_size': 12})
         kpi_fmt = wb.add_format({'border': 1, 'bg_color': '#f0f0f0', 'font_size': 11})
-        
         ws_dash.write('B2', f"Report: {agenda_name}", title_fmt)
         ws_dash.write('B3', f"Generováno: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}")
-        
         ws_dash.write('B5', "Souhrnné metriky:", bold_fmt)
         row = 6
         for k, v in kpis.items():
             if v is not None:
-                label = k.replace("row_count", "Počet záznamů")\
-                         .replace("avg_activities", "Průměr aktivit")\
-                         .replace("avg_response_time", "Doba odezvy")
-                ws_dash.write(row, 1, label, kpi_fmt)
-                ws_dash.write(row, 2, str(v), kpi_fmt)
-                row += 1
-        
-        # Vložení grafu
+                label = k.replace("row_count", "Počet záznamů").replace("avg_activities", "Průměr aktivit").replace("avg_response_time", "Doba odezvy")
+                ws_dash.write(row, 1, label, kpi_fmt); ws_dash.write(row, 2, str(v), kpi_fmt); row += 1
         if chart:
             try:
-                # Tady je magie - konverze Altair JSON na PNG
-                png_data = vlc.vegalite_to_png(chart.to_json(), scale=2)
+                # DŮLEŽITÉ: Přidání dat přímo do specifikace před konverzí
+                chart_spec = chart.to_dict()
+                # vl_convert potřebuje mít data přímo v JSONu
+                png_data = vlc.vegalite_to_png(chart_spec, scale=2)
                 ws_dash.write(row + 2, 1, "Grafický přehled:", bold_fmt)
                 ws_dash.insert_image(row + 4, 1, 'chart.png', {'image_data': io.BytesIO(png_data), 'x_scale': 0.7, 'y_scale': 0.7})
-            except Exception as e: 
-                ws_dash.write(row + 4, 1, f"Chyba grafu: {e}")
-            
+            except Exception as e:
+                ws_dash.write(row + 4, 1, f"Chyba vykreslení grafu: {str(e)[:100]}")
         ws_dash.set_column('B:C', 25)
-        
-        # List s daty
         df.to_excel(writer, sheet_name='Data', index=False)
         writer.sheets['Data'].set_column(0, len(df.columns) - 1, 20)
-        
     output.seek(0)
     return output
 
 def reset_filters():
-    for k in st.session_state.keys():
+    for k in list(st.session_state.keys()):
         if k.startswith(("filter_", "stat_", "tg_", "slider_", "date_col_select", "check_")): del st.session_state[k]
 
-# --- HLAVNÍ FUNKCE ---
+# --- MAIN ---
 def render_statistics():
-    # 1. ZMĚNA DESIGNU SIDEBARU
-    st.markdown("""
-        <style>
-            [data-testid="stSidebar"] { display: block !important; border-right: 1px solid #f0f0f0; }
-            .block-container { padding-top: 1rem !important; }
-            section[data-testid="stSidebar"] > div { padding-top: 2rem; }
-            hr { margin: 0.5rem 0; }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # 2. HLAVIČKA A NAVIGACE
+    st.markdown("""<style>[data-testid="stSidebar"] { display: block !important; border-right: 1px solid #f0f0f0; } .block-container { padding-top: 1rem !important; } hr { margin: 0.5rem 0; }</style>""", unsafe_allow_html=True)
     c_back, c_tit, _ = st.columns([1, 4, 1])
     with c_back:
-        if st.button("⬅️ Menu", key="back_menu"):
-            st.session_state.current_app = "main_menu"; st.rerun()
-    
-    # 3. KONTROLA DB
-    if not os.path.exists(DB_PATH):
-        st.error(f"❌ Databáze nenalezena."); return
+        if st.button("⬅️ Menu", key="back_menu"): st.session_state.current_app = "main_menu"; st.rerun()
+    if not os.path.exists(DB_PATH): st.error(f"❌ Databáze nenalezena."); return
 
-    # 4. NAČTENÍ DAT PODLE SIDEBARU
     with st.sidebar:
-        st.markdown("### ⚙️ Nastavení")
-        agendas = ["Tickety", "Aktivity", "Zásilky", "Klienti"]
-        sel_agenda = st.selectbox("Agenda:", agendas, key="agenda_select", label_visibility="collapsed")
+        st.markdown("### ⚙️ Zdroj dat")
+        all_tables = get_all_tables()
+        nice_map = {"Tickety": "Tickety", "Aktivity": "Aktivity", "Zásilky": "Zásilky", "Klienti": "Klienti"}
+        known_internal = ['tickets', 'activities', 'clients', 'shipments', 'contacts', 'users', 'categories', 'statuses', 'queues', 'sqlite_sequence']
+        other_tables = [t for t in all_tables if t not in known_internal]
+        options = list(nice_map.keys()) + other_tables
+        sel_agenda = st.selectbox("Agenda:", options, key="agenda_select", label_visibility="collapsed")
         
         st.markdown("### 👁️ Zobrazení")
         show_graph = st.checkbox("Grafy", value=True)
         show_table = st.checkbox("Tabulka", value=True)
-        
         st.divider()
         if st.button("🔄 Vyčistit filtry", use_container_width=True): reset_filters(); st.rerun()
-        
         st.markdown("### 🔍 Filtry")
-        
         df = load_data_from_db(sel_agenda)
         if df.empty: st.warning("Žádná data."); return
-
         filtered_df = df.copy()
 
-        # --- A. DATUMOVÝ FILTR ---
-        date_cols = [c for c in df.columns if "datum" in c.lower() or "date" in c.lower() or "vytvořeno" in c.lower()]
+        # --- DATUMOVÝ FILTR ---
+        date_cols = [c for c in df.columns if any(x in str(c).lower() for x in ["datum", "date", "vytvořeno", "created", "time"])]
         active_date_col = None
         if date_cols:
-            active_date_col = st.selectbox("Filtrovat dle data:", date_cols, index=0, key="date_col_select")
+            active_date_col = st.selectbox("Dle data:", date_cols, index=0, key="date_col_select")
             if not pd.api.types.is_datetime64_any_dtype(filtered_df[active_date_col]):
                 filtered_df[active_date_col] = pd.to_datetime(filtered_df[active_date_col], errors='coerce')
             
-            dates = filtered_df[active_date_col].dropna()
-            if not dates.empty:
-                mn, mx = dates.min().date(), dates.max().date()
-                default_start = max(mn, mx - datetime.timedelta(days=30))
-                d_range = st.slider("", min_value=mn, max_value=mx, value=(default_start, mx), format="DD.MM", key="slider_date")
-                s_date, e_date = pd.to_datetime(d_range[0]), pd.to_datetime(d_range[1]) + pd.Timedelta(days=1)
-                filtered_df = filtered_df[(filtered_df[active_date_col] >= s_date) & (filtered_df[active_date_col] < e_date)]
+            valid_dates = filtered_df[active_date_col].dropna()
+            # OPRAVA SLIDERU: Kontrola existence a rozdílnosti min/max
+            if not valid_dates.empty:
+                mn, mx = valid_dates.min().date(), valid_dates.max().date()
+                if mn < mx:
+                    default_start = max(mn, mx - datetime.timedelta(days=30))
+                    d_range = st.slider("", min_value=mn, max_value=mx, value=(default_start, mx), format="DD.MM", key="slider_date")
+                    s_date, e_date = pd.to_datetime(d_range[0]), pd.to_datetime(d_range[1]) + pd.Timedelta(days=1)
+                    filtered_df = filtered_df[(filtered_df[active_date_col] >= s_date) & (filtered_df[active_date_col] < e_date)]
+                else:
+                    st.caption(f"Pouze jeden den: {mn}")
+            else:
+                st.caption("Sloupec neobsahuje platná data.")
 
-        # --- B. DYNAMICKÉ FILTRY ---
+        # --- DYNAMICKÉ FILTRY ---
         filter_cols = []
         if sel_agenda == "Tickety": filter_cols = ["Kategorie", "Priorita", "Uživatel", "Statusy"]
         elif sel_agenda == "Aktivity": filter_cols = ["Typ", "Směr", "Odesílatel"]
         elif sel_agenda == "Zásilky": filter_cols = ["carrier", "status"]
+        else:
+            for c in filtered_df.columns:
+                if filtered_df[c].dtype == 'object' and filtered_df[c].nunique() < 50: filter_cols.append(c)
 
         for col in filter_cols:
             if col in filtered_df.columns:
                 opts = sorted(filtered_df[col].dropna().astype(str).unique())
-                sel = st.multiselect(col, opts, key=f"filter_{col}")
-                if sel: filtered_df = filtered_df[filtered_df[col].astype(str).isin(sel)]
+                if opts:
+                    sel = st.multiselect(col, opts, key=f"filter_{col}")
+                    if sel: filtered_df = filtered_df[filtered_df[col].astype(str).isin(sel)]
 
-        # --- C. SPECIÁLNÍ FILTRY (Až dole) ---
         if sel_agenda == "Tickety":
-            # VIP Filtr s tooltipem
             if "VIP" in filtered_df.columns:
-                if st.checkbox("⭐ Pouze VIP klienti", key="check_vip", help="Zobrazí pouze tickety, které jsou označeny parametrem VIP."):
+                if st.checkbox("⭐ Pouze VIP klienti", key="check_vip", help="Zobrazí pouze tickety označené VIP."):
                     filtered_df = filtered_df[filtered_df["VIP"].str.contains("VIP", na=False)]
-
-            # Dev Task Filtr s tooltipem a novým názvem
-            has_dev_cols = "dev_task1" in filtered_df.columns or "dev_task2" in filtered_df.columns
-            if has_dev_cols:
-                if st.checkbox("🛠️ Pouze s vazbou na vývoj", key="check_dev", help="Zobrazí tickety, které mají vazbu na vývoj formou BO, HL, TZ, NL ad."):
+            has_dev = any(x in filtered_df.columns for x in ["dev_task1", "dev_task2"])
+            if has_dev:
+                if st.checkbox("🛠️ Pouze s vazbou na vývoj", key="check_dev", help="Tickety s vazbou na BO, HL, TZ, NL ad."):
                     cond = pd.Series(False, index=filtered_df.index)
-                    if "dev_task1" in filtered_df.columns: 
-                        cond |= filtered_df["dev_task1"].notna() & (filtered_df["dev_task1"] != "")
-                    if "dev_task2" in filtered_df.columns: 
-                        cond |= filtered_df["dev_task2"].notna() & (filtered_df["dev_task2"] != "")
+                    for c in ["dev_task1", "dev_task2"]:
+                        if c in filtered_df.columns: cond |= filtered_df[c].notna() & (filtered_df[c] != "")
                     filtered_df = filtered_df[cond]
 
-    # --- PŘÍPRAVA DAT (GRAFY) PŘED VYKRESLENÍM UI ---
-    # Musíme vytvořit objekt grafu TADY, abychom ho mohli předat do tlačítka exportu, které je nahoře.
+    # --- GRAFY & KPI ---
     export_chart = None
-    
     if show_graph and not filtered_df.empty and active_date_col:
         chart_df = filtered_df.copy()
         daily = chart_df.groupby(chart_df[active_date_col].dt.date).size().reset_index(name='Počet')
-        
         export_chart = alt.Chart(daily).mark_line(point=True).encode(
-            x=alt.X(active_date_col, title='Datum'),
-            y=alt.Y('Počet', title='Počet'),
-            tooltip=[active_date_col, 'Počet']
+            x=alt.X(f'{active_date_col}:T', title='Datum'),
+            y=alt.Y('Počet:Q', title='Počet'),
+            tooltip=[alt.Tooltip(f'{active_date_col}:T', title='Datum'), 'Počet']
         ).properties(height=300, title="Vývoj v čase").interactive()
 
-    # 5. HLAVNÍ PLOCHA (Dashboard)
-    with c_tit:
-        st.markdown(f"<h1 style='text-align: center; margin: 0;'>{sel_agenda}</h1>", unsafe_allow_html=True)
-    
-    # KPI a Tlačítko Exportu
+    with c_tit: st.markdown(f"<h1 style='text-align: center; margin: 0;'>{sel_agenda}</h1>", unsafe_allow_html=True)
     kpis = calculate_kpis(filtered_df)
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Počet záznamů", kpis["row_count"])
     if kpis["avg_activities"]: k2.metric("Aktivity / ticket", kpis["avg_activities"])
     if kpis["avg_response_time"]: k3.metric("Doba odezvy", kpis["avg_response_time"])
-    
     with k4:
-        st.write("") # Spacer
+        st.write("")
         if not filtered_df.empty:
-            # Tady už známe 'export_chart', takže ho můžeme poslat do funkce
             xlsx = generate_excel_report(filtered_df, kpis, export_chart, sel_agenda)
             st.download_button("📥 Export XLSX", xlsx, f"Report_{sel_agenda}.xlsx", "application/vnd.ms-excel", use_container_width=True)
 
     st.markdown("---")
-
-    # 6. VYKRESLENÍ GRAFŮ
     if show_graph and not filtered_df.empty:
-        # Vykreslíme ten graf, co jsme si připravili nahoře
-        if export_chart:
-            st.altair_chart(export_chart, use_container_width=True)
-        
-        # Koláčový graf (Kategorie) - ten není v exportu jako main chart, ale zobrazíme ho
+        if export_chart: st.altair_chart(export_chart, use_container_width=True)
         if "Kategorie" in filtered_df.columns:
             cat_counts = filtered_df["Kategorie"].value_counts().reset_index()
             cat_counts.columns = ["Kategorie", "Počet"]
-            
-            c2 = alt.Chart(cat_counts).mark_arc(innerRadius=60).encode(
-                theta=alt.Theta("Počet", stack=True),
-                color=alt.Color("Kategorie"),
-                tooltip=["Kategorie", "Počet"]
-            ).properties(height=300)
+            c2 = alt.Chart(cat_counts).mark_arc(innerRadius=60).encode(theta="Počet", color="Kategorie", tooltip=["Kategorie", "Počet"]).properties(height=300)
             st.altair_chart(c2, use_container_width=True)
 
-    # 7. TABULKA
     if show_table and not filtered_df.empty:
         st.write("#### Detailní data")
         st.dataframe(filtered_df, use_container_width=True, height=500)
