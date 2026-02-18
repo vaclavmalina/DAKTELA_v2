@@ -8,3 +8,5 @@ openpyxl
 beautifulsoup4
 pandas
 openai
+xlsxwriter
+vl-convert-python

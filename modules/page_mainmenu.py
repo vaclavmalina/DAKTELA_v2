@@ -1,28 +1,67 @@
 import streamlit as st
 
 def render_main_menu():
-    # Nadpis s větším odsazením zespodu, aby se "nedusil" na tlačítkách
-    st.markdown("<h1 style='text-align: center; margin-bottom: 60px;'>Balíkobot - 🧬 Datio</h1>", unsafe_allow_html=True)
+    # Header sekce s uvítáním
+    st.markdown("<h1 style='text-align: center; margin-bottom: 10px;'>Balíkobot - 🧬 Datio</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: gray; margin-bottom: 50px;'>Vítejte v centrálním rozcestníku. Zvolte modul pro pokračování.</p>", unsafe_allow_html=True)
 
-    # Definice pouze aktivních modulů
+    # Definice modulů (přidal jsem 'icon' pro vizuální efekt)
     menu = [
-        {"label": "🔎 Analýza ticketů", "id": "harvester", "help": "Vyhledávání a filtrace ticketů"},
-        {"label": "📊 Statistiky",      "id": "statistics", "help": "Přehledy a grafy"},
-        {"label": "🔄 Aktualizace DB",  "id": "db_update",  "help": "Synchronizace dat z Daktely"},
-        {"label": "🗄️ Stažení dat",     "id": "downloader", "help": "Export do Excelu/CSV"},
+        {
+            "label": "Analýza ticketů", 
+            "page": "analyza", 
+            "icon": "🔎",
+            "desc": "Vyhledávání, filtrace a AI analýza ticketů."
+        },
+        {
+            "label": "Statistiky", 
+            "page": "statistiky", 
+            "icon": "📊",
+            "desc": "Grafy, přehledy a trendy v datech."
+        },
+        {
+            "label": "Stažení reportů", 
+            "page": "download", 
+            "icon": "🗄️",
+            "desc": "Export dat do Excelu a CSV."
+        },
+        {
+            "label": "Aktualizace DB", 
+            "page": "db-update", 
+            "icon": "🔄",
+            "desc": "Synchronizace dat z Daktely do lokální DB."
+        },
+        {
+            "label": "Prohlížeč DB", 
+            "page": "db-view", 
+            "icon": "💾",
+            "desc": "Přímý náhled do tabulek a kontrola dat."
+        },
     ]
 
-    # Layout: Použijeme sloupce [1, 2, 1] pro vycentrování.
-    # Prostřední sloupec (šířka 2) bude obsahovat tlačítka.
-    _, col, _ = st.columns([1, 2, 1])
-
-    with col:
-        for item in menu:
-            # Vykreslení tlačítka
-            if st.button(item["label"], use_container_width=True, key=f"btn_{item['id']}", help=item.get("help")):
-                st.session_state.current_app = item["id"]
-                st.rerun()
-            
-            # ELEGANTNÍ MEZERA
-            # Místo prázdného řádku vložíme neviditelný blok s výškou 15px
-            st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    # --- GRID LAYOUT (3 sloupce) ---
+    # Vypočítáme řádky, abychom mohli iterovat
+    cols = st.columns(3)
+    
+    for i, item in enumerate(menu):
+        # Vybereme sloupec (0, 1, 2) podle indexu
+        col = cols[i % 3]
+        
+        with col:
+            # Vytvoříme kartu s rámečkem
+            with st.container(border=True):
+                # Ikona a Nadpis
+                st.markdown(f"### {item['icon']} {item['label']}")
+                
+                # Popis (výška min-height zajistí, že karty budou stejně vysoké i při různě dlouhém textu)
+                st.markdown(f"<div style='min-height: 40px; color: grey; font-size: 0.9em;'>{item['desc']}</div>", unsafe_allow_html=True)
+                
+                st.write("") # Mezera
+                
+                # Tlačítko přes celou šířku karty
+                if st.button("Otevřít ➡️", key=f"btn_{item['page']}", use_container_width=True):
+                    target_page = st.session_state.page_map.get(item["page"])
+                    if target_page:
+                        st.switch_page(target_page)
+                    else:
+                        st.error("Modul nenalezen.")

@@ -1,325 +1,279 @@
 import streamlit as st
 import pandas as pd
-import datetime
+import sqlite3
 import os
 import altair as alt
+import datetime
+import io
+import xlsxwriter
+import vl_convert as vlc 
 
-# --- POMOCNÉ FUNKCE (Přímo zde) ---
+# --- KONFIGURACE CESTY K DB ---
+DB_PATH = os.path.join('data', 'daktela_data.db')
+
+# --- POMOCNÉ FUNKCE ---
 
 def format_human_time(seconds):
     if pd.isna(seconds) or seconds is None: return "N/A"
-    seconds = int(round(seconds))
+    try: seconds = int(round(float(seconds)))
+    except: return "N/A"
     if seconds < 60: return f"{seconds} s"
-    elif seconds < 3600:
-        m, s = divmod(seconds, 60)
-        return f"{m} m {s} s"
-    else:
-        h, remainder = divmod(seconds, 3600)
-        m, s = divmod(remainder, 60)
-        return f"{h} h {m} m"
+    elif seconds < 3600: return f"{divmod(seconds, 60)[0]} m {divmod(seconds, 60)[1]} s"
+    else: return f"{divmod(seconds, 3600)[0]} h {divmod(divmod(seconds, 3600)[1], 60)[0]} m"
 
 def calculate_kpis(df):
-    stats = {"row_count": len(df), "avg_activities": None, "avg_response_time": None, "avg_client_reaction": None}
+    stats = {"row_count": len(df), "avg_activities": None, "avg_response_time": None}
     if df.empty: return stats
-
     if "Počet aktivit" in df.columns:
         avg_act = pd.to_numeric(df["Počet aktivit"], errors='coerce').mean()
         stats["avg_activities"] = round(avg_act, 1) if not pd.isna(avg_act) else 0
-    
     if "Doba první odpovědi" in df.columns:
         avg_resp = pd.to_numeric(df["Doba první odpovědi"], errors='coerce').mean()
         if not pd.isna(avg_resp): stats["avg_response_time"] = format_human_time(avg_resp)
-
-    if "Poslední aktivita operátora" in df.columns and "Poslední aktivita klienta" in df.columns:
-        try:
-            op_times = pd.to_datetime(df["Poslední aktivita operátora"], errors='coerce')
-            cl_times = pd.to_datetime(df["Poslední aktivita klienta"], errors='coerce')
-            mask = cl_times > op_times
-            diff = cl_times[mask] - op_times[mask]
-            if not diff.empty: stats["avg_client_reaction"] = format_human_time(diff.dt.total_seconds().mean())
-        except: pass
     return stats
 
-def filter_data(df, date_range=None, date_col_name=None, status_list=None, vip_list=None, status_match_mode='any', **kwargs):
-    filtered_df = df.copy()
+def get_db_connection():
+    if not os.path.exists(DB_PATH): return None
+    return sqlite3.connect(DB_PATH)
 
-    # 1. Datum
-    if date_range and len(date_range) == 2 and date_col_name and date_col_name in filtered_df.columns:
-        filtered_df["_temp_date"] = pd.to_datetime(filtered_df[date_col_name], dayfirst=True, errors='coerce')
-        start_date = pd.to_datetime(date_range[0])
-        end_date = pd.to_datetime(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-        filtered_df = filtered_df[(filtered_df["_temp_date"] >= start_date) & (filtered_df["_temp_date"] <= end_date)]
-        filtered_df = filtered_df.drop(columns=["_temp_date"])
+def load_data_from_db(agenda):
+    conn = get_db_connection()
+    if not conn: return pd.DataFrame()
+    try:
+        if agenda == "Tickety":
+            query = """
+            SELECT t.*, c.title as 'Kategorie', u.title as 'Uživatel', s.title as 'Statusy', 
+                   cl.title as 'Klient', co.title as 'Kontakt'
+            FROM tickets t
+            LEFT JOIN categories c ON t.category_id = c.category_id
+            LEFT JOIN users u ON t.user_id = u.user_id
+            LEFT JOIN statuses s ON t.status_id = s.status_id
+            LEFT JOIN clients cl ON t.client_id = cl.client_id
+            LEFT JOIN contacts co ON t.contact_id = co.contact_id
+            """
+            df = pd.read_sql_query(query, conn)
+            rename_map = {
+                "activity_count": "Počet aktivit", "priority": "Priorita",
+                "created_date": "Datum vytvoření", "edited_date": "Poslední změna",
+                "first_answer_date": "První odpověď", "stage": "Fáze", 
+                "vip": "VIP", "title": "Předmět"
+            }
+            df.rename(columns=rename_map, inplace=True)
+            if "VIP" in df.columns:
+                df["VIP"] = df["VIP"].apply(lambda x: "→ VIP KLIENT ←" if x == 1 else "Standard")
+        
+        elif agenda == "Aktivity":
+            query = """
+            SELECT a.*, q.title as 'Fronta', c.title as 'Kategorie'
+            FROM activities a
+            LEFT JOIN queues q ON a.queue_id = q.queue_id
+            LEFT JOIN categories c ON a.category_id = c.category_id
+            """
+            df = pd.read_sql_query(query, conn)
+            df.rename(columns={"type": "Typ", "direction": "Směr", "sender": "Odesílatel", "created_date": "Datum"}, inplace=True)
+        
+        elif agenda == "Zásilky":
+            try: df = pd.read_sql_query("SELECT * FROM shipments", conn)
+            except: df = pd.DataFrame()
+        
+        elif agenda == "Klienti":
+            df = pd.read_sql_query("SELECT * FROM clients", conn)
+            df.rename(columns={"title": "Název klienta", "client_type": "Typ klienta"}, inplace=True)
+        
+        else: df = pd.DataFrame()
+    except Exception as e: st.error(f"SQL Error: {e}"); df = pd.DataFrame()
+    finally: conn.close()
+    return df
 
-    # 2. Statusy
-    if status_list and "Statusy" in filtered_df.columns:
-        selected_set = set(status_list)
-        def check_status(row_val):
-            if pd.isna(row_val): return False
-            row_set = set([x.strip() for x in str(row_val).split(',') if x.strip()])
-            return row_set == selected_set if status_match_mode == 'exact' else not row_set.isdisjoint(selected_set)
-        filtered_df = filtered_df[filtered_df["Statusy"].apply(check_status)]
-
-    # 3. VIP
-    if vip_list and "VIP" in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df["VIP"].isin(vip_list)]
-
-    # 4. Dynamické filtry
-    for col_name, selected_values in kwargs.items():
-        if selected_values and col_name in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).isin(selected_values)]
-
-    return filtered_df
-
-CARRIER_MAPPING = {
-    'intime': 'WeDo InTime', 'inpost': 'InPost', 'dhlde': 'DHL DE', 'gls': 'GLS',
-    'tnt': 'TNT', 'zasilkovna': 'Zásilkovna', 'sps': 'SPS (Slovak Parcel Service)',
-    'dhlparcel': 'DHL Parcel', 'dachser': 'Dachser', 'dhlfreightec': 'DHL Freight EuroConnect',
-    'airway': 'Airway', 'ppl': 'PPL', 'qdl': 'QDL', 'spring': 'Spring', 'ups': 'UPS',
-    'dbschenker': 'DB Schenker', 'raben': 'Raben', 'gwcz': 'Gebrüder Weiss CZ',
-    'sameday': 'Sameday', 'sp': 'Slovenská pošta', 'ulozenka': 'WEDO Uloženka',
-    'dhl': 'DHL Express', 'liftago': 'Kurýr na přesný čas (Liftago)',
-    'gw': 'Gebrüder Weiss SK', 'pbh': 'Pošta bez hranic', 'geis_cargo': 'Geis',
-    'ppl_cargo': 'PPL Cargo', 'toptrans': 'TopTrans', 'fedex': 'FedEx', 'japo': 'JAPO',
-    'messenger': 'Messenger', 'sds': 'SDS (Slovenský Doručovací Systém)',
-    'dsv': 'DSV', 'fofr': 'FOFR', 'magyarposta': 'Maďarská pošta', 'dpd': 'DPD',
-    'cp': 'Česká pošta'
-}
-
-def reset_filters_callback():
-    keys_to_delete = []
-    for key in st.session_state.keys():
-        if key == "slider_main_date": keys_to_delete.append(key)
-        if key.startswith(("filter_", "stat_", "tg_")): keys_to_delete.append(key)
-    for k in keys_to_delete: del st.session_state[k]
-
-def select_all(key, options): st.session_state[key] = options
-def clear_all(key): st.session_state[key] = []
-def clean_column_name(col_name): return str(col_name).replace('\ufeff', '').replace("'", "").replace('"', "").strip()
-
-def load_local_files():
-    local_path = "data/excel"
-    # Zajištění existence složky
-    if not os.path.exists(local_path):
-        try:
-            os.makedirs(local_path)
-        except: return # Pokud nejde vytvořit, nevadí, vyřešíme níže
-
-    if os.path.exists(local_path):
-        files = [f for f in os.listdir(local_path) if f.endswith(('.csv', '.xlsx', '.xls'))]
-        for file_name in files:
-            if file_name not in st.session_state.uploaded_data:
-                full_path = os.path.join(local_path, file_name)
-                try:
-                    if file_name.endswith('.csv'): 
-                        df = pd.read_csv(full_path, sep=',', engine='python', encoding='utf-8-sig')
-                    else: 
-                        df = pd.read_excel(full_path)
-                    
-                    df.columns = [clean_column_name(c) for c in df.columns]
-                    if "Packages" in file_name or "packages" in file_name:
-                        df.rename(columns=CARRIER_MAPPING, inplace=True)
-                    st.session_state.uploaded_data[file_name] = df
-                except: pass
-
-def render_standard_filters(df, filter_columns):
-    filters = {}
-    date_col = None
-    possible_cols = ["DAY", "Day", "Datum od", "Vytvořeno", "Datum", "Date", "Created", "timestamp"]
-    date_col = next((c for c in possible_cols if c in df.columns), None)
-    
-    if not date_col and not df.empty:
-        first = df.columns[0]
-        if pd.api.types.is_datetime64_any_dtype(df[first]): date_col = first
-        else:
+def generate_excel_report(df, kpis, chart=None, agenda_name="Report"):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        wb = writer.book
+        ws_dash = wb.add_worksheet('Přehled')
+        writer.sheets['Přehled'] = ws_dash
+        
+        title_fmt = wb.add_format({'bold': True, 'font_size': 16, 'color': '#2c3e50'})
+        bold_fmt = wb.add_format({'bold': True, 'font_size': 12})
+        kpi_fmt = wb.add_format({'border': 1, 'bg_color': '#f0f0f0', 'font_size': 11})
+        
+        ws_dash.write('B2', f"Report: {agenda_name}", title_fmt)
+        ws_dash.write('B3', f"Generováno: {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}")
+        
+        ws_dash.write('B5', "Souhrnné metriky:", bold_fmt)
+        row = 6
+        for k, v in kpis.items():
+            if v is not None:
+                label = k.replace("row_count", "Počet záznamů")\
+                         .replace("avg_activities", "Průměr aktivit")\
+                         .replace("avg_response_time", "Doba odezvy")
+                ws_dash.write(row, 1, label, kpi_fmt)
+                ws_dash.write(row, 2, str(v), kpi_fmt)
+                row += 1
+        
+        # Vložení grafu
+        if chart:
             try:
-                pd.to_datetime(df[first], dayfirst=True, errors='raise')
-                date_col = first
-            except: pass
+                # Tady je magie - konverze Altair JSON na PNG
+                png_data = vlc.vegalite_to_png(chart.to_json(), scale=2)
+                ws_dash.write(row + 2, 1, "Grafický přehled:", bold_fmt)
+                ws_dash.insert_image(row + 4, 1, 'chart.png', {'image_data': io.BytesIO(png_data), 'x_scale': 0.7, 'y_scale': 0.7})
+            except Exception as e: 
+                ws_dash.write(row + 4, 1, f"Chyba grafu: {e}")
+            
+        ws_dash.set_column('B:C', 25)
+        
+        # List s daty
+        df.to_excel(writer, sheet_name='Data', index=False)
+        writer.sheets['Data'].set_column(0, len(df.columns) - 1, 20)
+        
+    output.seek(0)
+    return output
 
-    if date_col:
-        try:
-            dates = pd.to_datetime(df[date_col], dayfirst=True, errors='coerce').dropna()
-            if not dates.empty:
-                mn, mx = dates.min().date(), dates.max().date()
-                st.subheader(f"📅 Datum")
-                filters['active_date_col'] = date_col 
-                filters["date_range"] = st.slider("", min_value=mn, max_value=mx, value=(mn, mx), format="DD.MM.YY", key="slider_main_date")
-        except: pass
-
-    for label, col_name in filter_columns.items():
-        if col_name in df.columns:
-            try:
-                raw = df[col_name].dropna().astype(str)
-                unq = set()
-                for x in raw: unq.update([i.strip() for i in x.split(',') if i.strip()])
-                opts = sorted(list(unq))
-                
-                key_prefix = f"filter_{col_name}"
-                st.subheader(label)
-                c1, c2 = st.columns(2)
-                c1.button("Vše", key=f"all_{key_prefix}", on_click=select_all, args=(key_prefix, opts))
-                c2.button("Nic", key=f"none_{key_prefix}", on_click=clear_all, args=(key_prefix,))
-                
-                sel = st.multiselect("", opts, default=opts, key=key_prefix, label_visibility="collapsed")
-                filters[col_name] = sel
-            except: pass
-    return filters
+def reset_filters():
+    for k in st.session_state.keys():
+        if k.startswith(("filter_", "stat_", "tg_", "slider_", "date_col_select", "check_")): del st.session_state[k]
 
 # --- HLAVNÍ FUNKCE ---
 def render_statistics():
-    # 1. ZOBRAZENÍ SIDEBARU (Přebití globálního CSS z main.py)
-    # Bez tohoto by uživatel neviděl filtry!
+    # 1. ZMĚNA DESIGNU SIDEBARU
     st.markdown("""
         <style>
-            [data-testid="stSidebar"] { display: block !important; }
-            .block-container { padding-top: 2rem !important; }
-            .stToggle { margin-top: -5px; }
+            [data-testid="stSidebar"] { display: block !important; border-right: 1px solid #f0f0f0; }
+            .block-container { padding-top: 1rem !important; }
+            section[data-testid="stSidebar"] > div { padding-top: 2rem; }
+            hr { margin: 0.5rem 0; }
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. HEADER A NAVIGACE (V hlavním okně, aby byla vidět vždy)
-    col_back, col_tit, _ = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("⬅️ Menu", key="stat_main_back", type="primary"):
-            st.session_state.current_app = "main_menu"
-            st.rerun()
-    with col_tit:
-        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>📊 Statistiky</h2>", unsafe_allow_html=True)
-    st.divider()
+    # 2. HLAVIČKA A NAVIGACE
+    c_back, c_tit, _ = st.columns([1, 4, 1])
+    with c_back:
+        if st.button("⬅️ Menu", key="back_menu"):
+            st.session_state.current_app = "main_menu"; st.rerun()
+    
+    # 3. KONTROLA DB
+    if not os.path.exists(DB_PATH):
+        st.error(f"❌ Databáze nenalezena."); return
 
-    # 3. NAČTENÍ DAT
-    if 'uploaded_data' not in st.session_state: st.session_state.uploaded_data = {}
-    if 'datasets' not in st.session_state: st.session_state.datasets = {}
-    
-    load_local_files()
-    
-    DATA_MAPPING = {
-        "📧 Daktela": ["Daktela", "daktela"],
-        "🚑 Hotline": ["HL", "hl", "Hotline"],
-        "❌ Broken Order": ["BO", "bo", "Broken"],
-        "📦 Zásilky": ["Packages", "packages", "Zasilky"]
-    }
-    
-    for category, keywords in DATA_MAPPING.items():
-        matched_file = next((f for f in st.session_state.uploaded_data.keys() if any(k in f for k in keywords)), None)
-        if matched_file:
-            st.session_state.datasets[category] = {"filename": matched_file, "data": st.session_state.uploaded_data[matched_file]}
-
-    # 4. KONTROLA DAT
-    available_cats = list(st.session_state.datasets.keys())
-    
-    if not available_cats:
-        st.warning("⚠️ Nebyla nalezena žádná data ve složce `data/excel`.")
-        st.info("Nahraj prosím soubory `.xlsx` nebo `.csv` do složky `data/excel`, aby názvy obsahovaly klíčová slova (Daktela, Hotline, Packages...).")
-        return # Ukončíme funkci, ale uživatel vidí tlačítko Zpět
-
-    # 5. SIDEBAR (VÝBĚR AGENDY)
+    # 4. NAČTENÍ DAT PODLE SIDEBARU
     with st.sidebar:
-        st.header("📂 Výběr agendy")
-        selected_agenda = st.radio("Dataset:", options=available_cats, index=0, key="agenda")
-        if selected_agenda in st.session_state.datasets:
-            st.caption(f"Soubor: `{st.session_state.datasets[selected_agenda]['filename']}`")
-
-    # 6. LOGIKA ZOBRAZENÍ
-    st.markdown(f"### Přehled: {selected_agenda}")
-    
-    df = st.session_state.datasets[selected_agenda]["data"]
-    filtered_df = df.copy()
-
-    # Filtry v sidebaru
-    with st.sidebar:
+        st.markdown("### ⚙️ Nastavení")
+        agendas = ["Tickety", "Aktivity", "Zásilky", "Klienti"]
+        sel_agenda = st.selectbox("Agenda:", agendas, key="agenda_select", label_visibility="collapsed")
+        
+        st.markdown("### 👁️ Zobrazení")
+        show_graph = st.checkbox("Grafy", value=True)
+        show_table = st.checkbox("Tabulka", value=True)
+        
         st.divider()
-        st.header("🔍 Filtry")
-        st.button("🔄 Resetovat filtry", use_container_width=True, on_click=reset_filters_callback)
+        if st.button("🔄 Vyčistit filtry", use_container_width=True): reset_filters(); st.rerun()
+        
+        st.markdown("### 🔍 Filtry")
+        
+        df = load_data_from_db(sel_agenda)
+        if df.empty: st.warning("Žádná data."); return
 
-        if "Daktela" in selected_agenda:
-            cols = {"📂 Kategorie": "Kategorie", "🚨 Priorita": "Priorita", "👤 Uživatel": "Uživatel"}
-            filters = render_standard_filters(df, cols)
+        filtered_df = df.copy()
+
+        # --- A. DATUMOVÝ FILTR ---
+        date_cols = [c for c in df.columns if "datum" in c.lower() or "date" in c.lower() or "vytvořeno" in c.lower()]
+        active_date_col = None
+        if date_cols:
+            active_date_col = st.selectbox("Filtrovat dle data:", date_cols, index=0, key="date_col_select")
+            if not pd.api.types.is_datetime64_any_dtype(filtered_df[active_date_col]):
+                filtered_df[active_date_col] = pd.to_datetime(filtered_df[active_date_col], errors='coerce')
             
-            sel_stats = None; stat_mode = 'any'
-            if "Statusy" in df.columns:
-                st.subheader("📌 Statusy")
-                raw = df["Statusy"].dropna().astype(str); unq = set()
-                for x in raw: unq.update([i.strip() for i in x.split(',') if i.strip()])
-                sel_stats = st.multiselect("", sorted(list(unq)), default=sorted(list(unq)), key="stat_dk")
-                if st.toggle("Přesná shoda", key="tg_stat"): stat_mode = 'exact'
+            dates = filtered_df[active_date_col].dropna()
+            if not dates.empty:
+                mn, mx = dates.min().date(), dates.max().date()
+                default_start = max(mn, mx - datetime.timedelta(days=30))
+                d_range = st.slider("", min_value=mn, max_value=mx, value=(default_start, mx), format="DD.MM", key="slider_date")
+                s_date, e_date = pd.to_datetime(d_range[0]), pd.to_datetime(d_range[1]) + pd.Timedelta(days=1)
+                filtered_df = filtered_df[(filtered_df[active_date_col] >= s_date) & (filtered_df[active_date_col] < e_date)]
 
-            sel_vip = None
-            if "VIP" in df.columns:
-                st.subheader("⭐ VIP")
-                if st.toggle("Jen VIP", key="tg_vip"): sel_vip = ["→ VIP KLIENT ←"]
+        # --- B. DYNAMICKÉ FILTRY ---
+        filter_cols = []
+        if sel_agenda == "Tickety": filter_cols = ["Kategorie", "Priorita", "Uživatel", "Statusy"]
+        elif sel_agenda == "Aktivity": filter_cols = ["Typ", "Směr", "Odesílatel"]
+        elif sel_agenda == "Zásilky": filter_cols = ["carrier", "status"]
 
-            filtered_df = filter_data(
-                df, date_range=filters.get("date_range"), date_col_name=filters.get("active_date_col"),
-                status_list=sel_stats, vip_list=sel_vip, status_match_mode=stat_mode,
-                Kategorie=filters.get("Kategorie"), Priorita=filters.get("Priorita"), Uživatel=filters.get("Uživatel")
-            )
+        for col in filter_cols:
+            if col in filtered_df.columns:
+                opts = sorted(filtered_df[col].dropna().astype(str).unique())
+                sel = st.multiselect(col, opts, key=f"filter_{col}")
+                if sel: filtered_df = filtered_df[filtered_df[col].astype(str).isin(sel)]
 
-        elif selected_agenda in ["🚑 Hotline", "❌ Broken Order"]:
-            cols = {"🚚 Carrier": "Carrier", "⚠️ Příčina": "Příčina chyby", "🚨 Priority": "Priority", "📌 Stav": "Stav úkolu"}
-            filters = render_standard_filters(df, cols)
-            kwargs = {k: v for k, v in filters.items() if k not in ["date_range", "active_date_col"]}
-            filtered_df = filter_data(df, date_range=filters.get("date_range"), date_col_name=filters.get("active_date_col"), **kwargs)
+        # --- C. SPECIÁLNÍ FILTRY (Až dole) ---
+        if sel_agenda == "Tickety":
+            # VIP Filtr s tooltipem
+            if "VIP" in filtered_df.columns:
+                if st.checkbox("⭐ Pouze VIP klienti", key="check_vip", help="Zobrazí pouze tickety, které jsou označeny parametrem VIP."):
+                    filtered_df = filtered_df[filtered_df["VIP"].str.contains("VIP", na=False)]
 
-        elif "Zásilky" in selected_agenda:
-            filters = render_standard_filters(df, {}) 
-            filtered_df = filter_data(df, date_range=filters.get("date_range"), date_col_name=filters.get("active_date_col"))
+            # Dev Task Filtr s tooltipem a novým názvem
+            has_dev_cols = "dev_task1" in filtered_df.columns or "dev_task2" in filtered_df.columns
+            if has_dev_cols:
+                if st.checkbox("🛠️ Pouze s vazbou na vývoj", key="check_dev", help="Zobrazí tickety, které mají vazbu na vývoj formou BO, HL, TZ, NL ad."):
+                    cond = pd.Series(False, index=filtered_df.index)
+                    if "dev_task1" in filtered_df.columns: 
+                        cond |= filtered_df["dev_task1"].notna() & (filtered_df["dev_task1"] != "")
+                    if "dev_task2" in filtered_df.columns: 
+                        cond |= filtered_df["dev_task2"].notna() & (filtered_df["dev_task2"] != "")
+                    filtered_df = filtered_df[cond]
 
-    # Výsledky (KPIs)
-    if "Daktela" in selected_agenda:
-        kpis = calculate_kpis(filtered_df)
-        st.markdown(f"#### 📈 Metriky ({len(filtered_df)} / {len(df)})")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Počet ticketů", kpis["row_count"])
-        c2.metric("Aktivity/ticket", kpis["avg_activities"])
-        c3.metric("Doba 1. odp.", kpis["avg_response_time"])
-        c4.metric("Reakce klienta", kpis["avg_client_reaction"])
-    else:
-        st.markdown(f"#### 📈 Přehled ({len(filtered_df)} / {len(df)})")
-        st.metric("Počet záznamů", len(filtered_df))
+    # --- PŘÍPRAVA DAT (GRAFY) PŘED VYKRESLENÍM UI ---
+    # Musíme vytvořit objekt grafu TADY, abychom ho mohli předat do tlačítka exportu, které je nahoře.
+    export_chart = None
+    
+    if show_graph and not filtered_df.empty and active_date_col:
+        chart_df = filtered_df.copy()
+        daily = chart_df.groupby(chart_df[active_date_col].dt.date).size().reset_index(name='Počet')
+        
+        export_chart = alt.Chart(daily).mark_line(point=True).encode(
+            x=alt.X(active_date_col, title='Datum'),
+            y=alt.Y('Počet', title='Počet'),
+            tooltip=[active_date_col, 'Počet']
+        ).properties(height=300, title="Vývoj v čase").interactive()
 
-    st.divider()
+    # 5. HLAVNÍ PLOCHA (Dashboard)
+    with c_tit:
+        st.markdown(f"<h1 style='text-align: center; margin: 0;'>{sel_agenda}</h1>", unsafe_allow_html=True)
+    
+    # KPI a Tlačítko Exportu
+    kpis = calculate_kpis(filtered_df)
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Počet záznamů", kpis["row_count"])
+    if kpis["avg_activities"]: k2.metric("Aktivity / ticket", kpis["avg_activities"])
+    if kpis["avg_response_time"]: k3.metric("Doba odezvy", kpis["avg_response_time"])
+    
+    with k4:
+        st.write("") # Spacer
+        if not filtered_df.empty:
+            # Tady už známe 'export_chart', takže ho můžeme poslat do funkce
+            xlsx = generate_excel_report(filtered_df, kpis, export_chart, sel_agenda)
+            st.download_button("📥 Export XLSX", xlsx, f"Report_{sel_agenda}.xlsx", "application/vnd.ms-excel", use_container_width=True)
 
-    # Grafy a Tabulky
-    with st.expander("⚙️ Nastavení zobrazení", expanded=True):
-        c1, c2, _ = st.columns(3)
-        show_graphs = c1.toggle("📊 Zobrazit grafy", value=True)
-        show_table = c2.toggle("📋 Zobrazit tabulku", value=True)
+    st.markdown("---")
 
-    if show_graphs and not filtered_df.empty:
-        date_col = filters.get("active_date_col")
-        if "Zásilky" in selected_agenda and date_col:
-             meta = ["Týden", "Datum od", "Datum do", "Week", "Date from", "Date to", date_col]
-             candidates = [c for c in filtered_df.columns if c not in meta]
-             for c in candidates: filtered_df[c] = pd.to_numeric(filtered_df[c], errors='coerce').fillna(0)
-             cols = [c for c in candidates if pd.api.types.is_numeric_dtype(filtered_df[c])]
-             
-             if cols:
-                 sums = filtered_df[cols].sum().sort_values(ascending=False)
-                 top5 = sums.head(5).index.tolist()
-                 sel_carriers = st.multiselect("Dopravci", sorted(cols), default=top5, key="graph_carrier_select")
-                 
-                 if sel_carriers:
-                     keep = [date_col] + sel_carriers
-                     chart_df = filtered_df[keep].copy()
-                     chart_df[date_col] = pd.to_datetime(chart_df[date_col], dayfirst=True, errors='coerce')
-                     melted = chart_df.melt(id_vars=[date_col], value_vars=sel_carriers, var_name='Dopravce', value_name='Počet')
-                     
-                     c = alt.Chart(melted).mark_line(point=True).encode(
-                         x=alt.X(date_col, title='Datum', axis=alt.Axis(format='%d.%m')),
-                         y=alt.Y('Počet'), color='Dopravce', tooltip=[date_col, 'Dopravce', 'Počet']
-                     ).interactive()
-                     st.altair_chart(c, use_container_width=True)
+    # 6. VYKRESLENÍ GRAFŮ
+    if show_graph and not filtered_df.empty:
+        # Vykreslíme ten graf, co jsme si připravili nahoře
+        if export_chart:
+            st.altair_chart(export_chart, use_container_width=True)
+        
+        # Koláčový graf (Kategorie) - ten není v exportu jako main chart, ale zobrazíme ho
+        if "Kategorie" in filtered_df.columns:
+            cat_counts = filtered_df["Kategorie"].value_counts().reset_index()
+            cat_counts.columns = ["Kategorie", "Počet"]
+            
+            c2 = alt.Chart(cat_counts).mark_arc(innerRadius=60).encode(
+                theta=alt.Theta("Počet", stack=True),
+                color=alt.Color("Kategorie"),
+                tooltip=["Kategorie", "Počet"]
+            ).properties(height=300)
+            st.altair_chart(c2, use_container_width=True)
 
-        elif date_col:
-            cdf = filtered_df.copy()
-            cdf[date_col] = pd.to_datetime(cdf[date_col], dayfirst=True, errors='coerce')
-            data = cdf.groupby(pd.Grouper(key=date_col, freq='W')).size().reset_index(name='Počet')
-            c = alt.Chart(data).mark_bar().encode(
-                x=alt.X(date_col, axis=alt.Axis(format='%d.%m')), y='Počet', tooltip=[date_col, 'Počet']
-            ).interactive()
-            st.altair_chart(c, use_container_width=True)
-
+    # 7. TABULKA
     if show_table and not filtered_df.empty:
-        st.data_editor(filtered_df, use_container_width=True, height=600, key=f"table_{selected_agenda}")
+        st.write("#### Detailní data")
+        st.dataframe(filtered_df, use_container_width=True, height=500)

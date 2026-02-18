@@ -303,14 +303,26 @@ def render_db_update():
     if 'db_date_to' not in st.session_state: st.session_state.db_date_to = date.today()
     if 'db_cat_select' not in st.session_state: st.session_state.db_cat_select = []
 
-    st.markdown("""<style>div.stButton > button {white-space: nowrap;}</style>""", unsafe_allow_html=True)
+    # ZMĚNA: Sjednocení CSS s page_dbview.py (padding + šířka + styl tlačítek)
+    st.markdown("""
+        <style>
+            .block-container {
+                max_width: 95% !important;
+                padding-top: 2rem;
+                padding-bottom: 2rem;
+            }
+            div.stButton > button {
+                white-space: nowrap;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-    col_back, col_title, _ = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("⬅️ Menu", key="db_menu_btn"):
-            st.session_state.current_app = "main_menu"; st.rerun()
+    # Sloupce pro navigaci - zachováváme [1, 4, 1] jako v dbview
+    col_back, col_title, col_next = st.columns([1, 4, 1])
+            
     with col_title:
         st.markdown("<h2 style='text-align: center; margin-top: -10px;'>🔄 Aktualizace databáze</h2>", unsafe_allow_html=True)
+            
     st.divider()
 
     if 'categories' not in st.session_state:

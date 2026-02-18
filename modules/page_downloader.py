@@ -63,9 +63,6 @@ def render_downloader():
         st.session_state.stop_download = False
 
     col_back, col_title, _ = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("⬅️ Menu", key="dl_menu_btn"):
-            st.session_state.current_app = "main_menu"; st.rerun()
     with col_title:
         st.markdown("<h2 style='text-align: center; margin-top: -10px;'>📊 Export Dat</h2>", unsafe_allow_html=True)
     st.divider()

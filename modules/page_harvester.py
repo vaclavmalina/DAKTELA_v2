@@ -8,8 +8,17 @@ import io
 from datetime import datetime, timedelta, date
 from collections import defaultdict
 from openai import OpenAI
-from config import NOISE_PATTERNS, CUT_OFF_PATTERNS, HISTORY_PATTERNS
-from utils.helpers import slugify, clean_html, format_date_split, identify_side
+# Předpokládáme existenci těchto modulů dle kontextu, pokud ne, skript může vyžadovat úpravu cest
+try:
+    from config import NOISE_PATTERNS, CUT_OFF_PATTERNS, HISTORY_PATTERNS
+    from utils.helpers import slugify, clean_html, format_date_split, identify_side
+except ImportError:
+    # Fallback pro případ, že běžíš izolovaně bez utils
+    NOISE_PATTERNS, CUT_OFF_PATTERNS, HISTORY_PATTERNS = [], [], []
+    def slugify(s): return s
+    def clean_html(s): return s
+    def format_date_split(s): return s, ""
+    def identify_side(a,b,c): return a
 
 # Zkusíme importovat prompt, pokud neexistuje, nastavíme fallback
 try:
@@ -80,7 +89,6 @@ def format_ticket_for_ai(ticket_entry):
 def generate_csv_stats_bytes(analyzed_data):
     """
     Vygeneruje CSV statistiku (Excel format) v paměti a vrátí bytes (UTF-8-SIG).
-    OPRAVA: lineterminator='\r\n' zajistí správné zobrazení v Excelu.
     """
     total = len(analyzed_data)
     if total == 0: return None
@@ -97,7 +105,6 @@ def generate_csv_stats_bytes(analyzed_data):
         if item.get("minimization_suggestion"): stats[status]["minimization"].append(item.get("minimization_suggestion"))
 
     output = io.StringIO()
-    # Zde je klíčová oprava pro Excel: lineterminator='\r\n'
     writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL, lineterminator='\r\n')
     
     header = ['Nový Status', 'Počet', 'Podíl (%)', 'Typické problémy', 'Návrhy automatizace', 'Návrhy minimalizace']
@@ -130,19 +137,38 @@ def generate_csv_stats_bytes(analyzed_data):
 # --- HLAVNÍ FUNKCE MODULU ---
 def render_harvester():
     # Načtení Secrets
-    INSTANCE_URL = st.secrets["DAKTELA_URL"]
-    ACCESS_TOKEN = st.secrets["DAKTELA_TOKEN"]
-    OPENAI_KEY = st.secrets.get("OPENAI_API_KEY")
+    try:
+        INSTANCE_URL = st.secrets["DAKTELA_URL"]
+        ACCESS_TOKEN = st.secrets["DAKTELA_TOKEN"]
+        OPENAI_KEY = st.secrets.get("OPENAI_API_KEY")
+    except:
+        INSTANCE_URL = ""
+        ACCESS_TOKEN = ""
+        OPENAI_KEY = ""
 
-    # --- Header ---
+    # --- CSS PRO ROZŠÍŘENÍ STRÁNKY (ZAROVNÁNÍ S DBUPDATE/VIEW) ---
+    st.markdown("""
+        <style>
+            .block-container {
+                max_width: 95% !important;
+                padding-top: 2rem;
+                padding-bottom: 2rem;
+            }
+            div.stButton > button {
+                white-space: nowrap;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # --- Header (Konzistentní s DB view/update) ---
     col_back, col_title, col_void = st.columns([1, 4, 1])
-    with col_back:
-        if st.button("⬅️ Menu", key="menu_btn"):
-            st.session_state.current_app = "main_menu"
-            st.session_state.harvester_phase = "filter"
-            st.rerun()
     with col_title:
         st.markdown("<h2 style='text-align: center; margin-top: -10px;'>🔎 Analýza ticketů</h2>", unsafe_allow_html=True)
+    
+    # Prázdný třetí sloupec pro zarovnání, případně zde může být tlačítko v budoucnu
+    with col_void:
+        pass
+
     st.divider()
 
     # --- Inicializace proměnných ---
@@ -162,16 +188,19 @@ def render_harvester():
     if 'ai_cost_total' not in st.session_state: st.session_state.ai_cost_total = 0.0
     if 'ai_tokens_total' not in st.session_state: st.session_state.ai_tokens_total = 0
 
-    # Načtení číselníků
-    if 'categories' not in st.session_state:
+    # OPRAVA CHYBY: Načtení číselníků - kontrolujeme ZDALI NĚCO CHYBÍ (OR místo jen categories)
+    if 'categories' not in st.session_state or 'statuses' not in st.session_state:
         try:
             res_cat = requests.get(f"{INSTANCE_URL}/api/v6/ticketsCategories.json", headers={'x-auth-token': ACCESS_TOKEN})
             cat_data = res_cat.json().get('result', {}).get('data', [])
             st.session_state['categories'] = sorted(cat_data, key=lambda x: x.get('title', '').lower())
+            
             res_stat = requests.get(f"{INSTANCE_URL}/api/v6/statuses.json", headers={'x-auth-token': ACCESS_TOKEN})
             stat_data = res_stat.json().get('result', {}).get('data', [])
             st.session_state['statuses'] = sorted(stat_data, key=lambda x: x.get('title', '').lower())
-        except: st.error("Chyba číselníků (Daktela API)."); st.stop()
+        except: 
+            st.error("Chyba číselníků (Daktela API). Zkontrolujte URL a TOKEN.")
+            st.stop()
 
     cat_options_map = {"VŠE (bez filtru)": "ALL"}; cat_options_map.update({c['title']: c['name'] for c in st.session_state['categories']})
     stat_options_map = {"VŠE (bez filtru)": "ALL"}; stat_options_map.update({s['title']: s['name'] for s in st.session_state['statuses']})
@@ -181,9 +210,7 @@ def render_harvester():
     # --- FÁZE 3: PROCESSING ---
     if st.session_state.harvester_phase == "processing":
         
-        # !!!!!!!!!!!!! OPRAVA DUCHŮ !!!!!!!!!!!!!
         time.sleep(0.2) 
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
         # 1. UI Info panel
         with st.container(border=True):
@@ -235,7 +262,7 @@ def render_harvester():
                     st.stop()
 
         # --- KROK 2: INIT ---
-        combined_cut_regex = re.compile("|".join(CUT_OFF_PATTERNS + HISTORY_PATTERNS), re.IGNORECASE | re.MULTILINE)
+        combined_cut_regex = re.compile("|".join(CUT_OFF_PATTERNS + HISTORY_PATTERNS), re.IGNORECASE | re.MULTILINE) if CUT_OFF_PATTERNS else None
         tickets_to_process = st.session_state.found_tickets
         if st.session_state.final_limit > 0: tickets_to_process = tickets_to_process[:st.session_state.final_limit]
 
@@ -286,8 +313,9 @@ def render_harvester():
                     if not cleaned: continue
                     if any(re.search(p, cleaned, re.IGNORECASE) for p in NOISE_PATTERNS): cleaned = "[AUTOMATICKÝ EMAIL BALÍKOBOTU]"
                     else:
-                        match = combined_cut_regex.search(cleaned)
-                        if match: cleaned = cleaned[:match.start()].strip() + "\n\n[PODPIS]"
+                        if combined_cut_regex:
+                            match = combined_cut_regex.search(cleaned)
+                            if match: cleaned = cleaned[:match.start()].strip() + "\n\n[PODPIS]"
                     
                     u_title = (act.get('user') or {}).get('title'); c_title = (act.get('contact') or {}).get('title'); direction = item.get('direction', 'out')
                     if direction == "in": sender = identify_side(c_title, address, is_user=False); recipient = "Balíkobot"
@@ -325,8 +353,6 @@ def render_harvester():
                         ticket_entry['ai_error'] = str(e); ticket_entry['new_status'] = "CHYBA AI"
 
                 full_export_data.append(ticket_entry)
-                
-                # Ošetření API limitů
                 time.sleep(0.1) 
 
             except Exception: pass
