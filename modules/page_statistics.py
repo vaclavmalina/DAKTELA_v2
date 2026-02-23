@@ -136,20 +136,29 @@ def reset_filters():
 def render_statistics():
     st.markdown("""<style>[data-testid="stSidebar"] { display: block !important; border-right: 1px solid #f0f0f0; } .block-container { padding-top: 1rem !important; } hr { margin: 0.5rem 0; }</style>""", unsafe_allow_html=True)
     c_back, c_tit, _ = st.columns([1, 4, 1])
-    with c_back:
-        if st.button("⬅️ Menu", key="back_menu"): st.session_state.current_app = "main_menu"; st.rerun()
     if not os.path.exists(DB_PATH): st.error(f"❌ Databáze nenalezena."); return
-
+    
     with st.sidebar:
         st.markdown("### ⚙️ Zdroj dat")
         all_tables = get_all_tables()
-        nice_map = {"Tickety": "Tickety", "Aktivity": "Aktivity", "Zásilky": "Zásilky", "Klienti": "Klienti"}
+        
+        # ZMĚNA: Mapa propojuje hezké názvy s názvy tabulek v databázi. Nabídnou se jen ty, co v DB reálně existují.
+        db_mapping = {"Tickety": "tickets", "Aktivity": "activities", "Zásilky": "shipments", "Klienti": "clients"}
+        options = [nice_name for nice_name, db_name in db_mapping.items() if db_name in all_tables]
+        
         known_internal = ['tickets', 'activities', 'clients', 'shipments', 'contacts', 'users', 'categories', 'statuses', 'queues', 'sqlite_sequence']
         other_tables = [t for t in all_tables if t not in known_internal]
-        options = list(nice_map.keys()) + other_tables
+        options.extend(other_tables)
+        
+        # ZMĚNA: Pojistka pro případ, že je databáze úplně prázdná
+        if not options:
+            st.warning("V databázi nejsou žádné dostupné tabulky.")
+            return
+
         sel_agenda = st.selectbox("Agenda:", options, key="agenda_select", label_visibility="collapsed")
         
         st.markdown("### 👁️ Zobrazení")
+        show_metrics = st.checkbox("Metriky", value=True) # ZMĚNA: Přidán checkbox pro zobrazení/skrytí metrik nahoře
         show_graph = st.checkbox("Grafy", value=True)
         show_table = st.checkbox("Tabulka", value=True)
         st.divider()
@@ -222,10 +231,15 @@ def render_statistics():
 
     with c_tit: st.markdown(f"<h1 style='text-align: center; margin: 0;'>{sel_agenda}</h1>", unsafe_allow_html=True)
     kpis = calculate_kpis(filtered_df)
+    
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Počet záznamů", kpis["row_count"])
-    if kpis["avg_activities"]: k2.metric("Aktivity / ticket", kpis["avg_activities"])
-    if kpis["avg_response_time"]: k3.metric("Doba odezvy", kpis["avg_response_time"])
+    
+    # ZMĚNA: Podmíněné vykreslení samotných metrik, sloupec pro export zůstává
+    if show_metrics:
+        k1.metric("Počet záznamů", kpis["row_count"])
+        if kpis["avg_activities"]: k2.metric("Aktivity / ticket", kpis["avg_activities"])
+        if kpis["avg_response_time"]: k3.metric("Doba odezvy", kpis["avg_response_time"])
+        
     with k4:
         st.write("")
         if not filtered_df.empty:

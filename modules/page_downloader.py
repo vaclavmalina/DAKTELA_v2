@@ -83,12 +83,27 @@ def render_downloader():
     # KONFIGURACE TICKETY
     if "Tickety" in agenda_type or "Obojí" in agenda_type:
         st.markdown("### 🎫 Nastavení pro Tickety")
-        # Definice polí pro API request
-        t_api_fields = ["name", "created", "user", "last_activity", "title", "priority", "stage", "customFields"]
-        # Definice sloupců pro zobrazení/excel (včetně rozbalených customFields)
-        t_display_cols = ["name", "created", "user", "last_activity", "title", "priority", "stage", "VIP", "DEV_TASK_1", "DEV_TASK_2"]
         
-        selected_display = st.multiselect("Sloupce (Tickety)", options=t_display_cols, default=t_display_cols)
+        t_api_fields = [
+            "name", "created", "user", "last_activity", "title", "priority", "stage", "customFields",
+            "category", "status", "client", "contact", "edited", "first_answer", 
+            "last_activity_op", "last_activity_cl", "reopen", "activity_count"
+        ]
+        
+        t_display_cols = [
+            "name", "created", "user", "last_activity", "title", "priority", "stage", 
+            "category", "status", "client", "contact", "edited", "first_answer", 
+            "last_activity_op", "last_activity_cl", "reopen", "activity_count", 
+            "VIP", "DEV_TASK_1", "DEV_TASK_2"
+        ]
+        
+        # ZMĚNA: Přidán parametr 'help', který vysvětluje, jak ovládat pořadí sloupců v exportu.
+        selected_display = st.multiselect(
+            "Sloupce (Tickety)", 
+            options=t_display_cols, 
+            default=t_display_cols,
+            help="Pořadí sloupců v Excelu určuje pořadí, v jakém je zde naklikáte. Pokud chcete změnit pozici sloupce, odeberte ho křížkem a přidejte znovu (zařadí se na konec)."
+        )
         
         cats = fetch_categories()
         col_t1, col_t2 = st.columns(2)
@@ -109,8 +124,16 @@ def render_downloader():
     # KONFIGURACE HOVORY
     if "Hovory" in agenda_type or "Obojí" in agenda_type:
         st.markdown("### 📞 Nastavení pro Hovory")
-        c_api_fields = ["id_call", "call_time", "direction", "id_queue", "id_agent", "duration", "answered"]
-        selected_display = st.multiselect("Sloupce (Hovory)", options=c_api_fields, default=c_api_fields)
+        
+        c_api_fields = ["name", "id_call", "ticket", "number", "call_time", "direction", "id_queue", "id_agent", "duration", "answered"]
+        
+        # ZMĚNA: Přidán parametr 'help' pro hovory.
+        selected_display = st.multiselect(
+            "Sloupce (Hovory)", 
+            options=c_api_fields, 
+            default=c_api_fields,
+            help="Pořadí sloupců v Excelu určuje pořadí, v jakém je zde naklikáte. Pokud chcete změnit pozici sloupce, odeberte ho křížkem a přidejte znovu (zařadí se na konec)."
+        )
         
         queues = fetch_queues()
         col_f1, col_f2 = st.columns(2)
@@ -130,21 +153,28 @@ def render_downloader():
 
     st.divider()
 
-    col_btn, col_stop = st.columns([3, 1])
+    # ZMĚNA: Tlačítko 'Spustit' zabaleno do 3 sloupců pro vycentrování (poměr 1:2:1)
+    _, col_btn, _ = st.columns([1, 2, 1])
     start_btn = col_btn.button("🚀 Spustit hromadný export", type="primary", use_container_width=True)
     
     if start_btn:
         st.session_state.stop_download = False
         final_dfs = {}
-        status_container = st.status("Zahajuji stahování...", expanded=True)
         
-        stop_placeholder = st.empty()
-        if stop_placeholder.button("🛑 Zastavit stahování", key="stop_btn_active"):
+        # ZMĚNA: Zastavovací tlačítko také vycentrováno, aby to neposkakovalo
+        _, col_stop, _ = st.columns([1, 2, 1])
+        stop_placeholder = col_stop.empty()
+        if stop_placeholder.button("🛑 Zastavit stahování", key="stop_btn_active", use_container_width=True):
             st.session_state.stop_download = True
+
+        status_container = st.status("Zahajuji stahování...", expanded=True)
 
         for task in download_tasks:
             if st.session_state.stop_download: break
             all_data, skip, take = [], 0, 1000
+            
+            # ZMĚNA: Uložení počátečního času pro výpočet ETA
+            start_time = time.time()
             
             while True:
                 if st.session_state.stop_download: break
@@ -201,8 +231,21 @@ def render_downloader():
                         
                         all_data.append(row)
 
-                    status_container.update(label=f"📥 Stahuji {task['name']}: {len(all_data)} / {total} záznamů...")
-                    if len(all_data) >= total or len(batch) < take: break
+                    # ZMĚNA: Výpočet rychlosti a dynamické vytvoření odhadovaného času (ETA)
+                    fetched = len(all_data)
+                    elapsed = time.time() - start_time
+                    eta_str = ""
+                    
+                    if fetched > 0 and total > fetched:
+                        avg_time_per_record = elapsed / fetched
+                        eta_seconds = int(avg_time_per_record * (total - fetched))
+                        m, s = divmod(eta_seconds, 60)
+                        h, m = divmod(m, 60)
+                        eta_str = f" | ⏳ ETA: {h:02d}:{m:02d}:{s:02d}" if h > 0 else f" | ⏳ ETA: {m:02d}:{s:02d}"
+
+                    status_container.update(label=f"📥 Stahuji {task['name']}: {fetched} / {total} záznamů...{eta_str}")
+                    
+                    if fetched >= total or len(batch) < take: break
                     skip += take
                     time.sleep(0.05)
                 except Exception as e:
@@ -230,5 +273,13 @@ def render_downloader():
                     for i, col in enumerate(df.columns):
                         ws.set_column(i, i, max(len(str(col)), 18))
             
-            st.success("Export připraven!")
-            st.download_button(label="💾 STÁHNOUT EXCEL (XLSX)", data=buffer.getvalue(), file_name=f"daktela_export_{date.today()}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary", use_container_width=True)
+            # ZMĚNA: Stahovací tlačítko rovněž vycentrováno
+            _, col_dl, _ = st.columns([1, 2, 1])
+            col_dl.download_button(
+                label="💾 STÁHNOUT EXCEL (XLSX)", 
+                data=buffer.getvalue(), 
+                file_name=f"daktela_export_{date.today()}.xlsx", 
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                type="primary", 
+                use_container_width=True
+            )
