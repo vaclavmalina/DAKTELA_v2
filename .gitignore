@@ -1,8 +1,7 @@
 data/
 *.bat
-
 .streamlit/secrets.toml
 *.env
-
 __pycache__/
 *.pyc
+gitignore_*.txt
