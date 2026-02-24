@@ -216,6 +216,15 @@ def init_db():
         FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id), FOREIGN KEY (queue_id) REFERENCES queues(queue_id), FOREIGN KEY (category_id) REFERENCES categories(category_id)
     )''')
     
+    # ZMĚNA: Nová spojovací tabulka pro ukládání VŠECH statusů u ticketů
+    c.execute('''CREATE TABLE IF NOT EXISTS ticket_statuses (
+        ticket_id INTEGER, 
+        status_id INTEGER,
+        PRIMARY KEY (ticket_id, status_id),
+        FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id),
+        FOREIGN KEY (status_id) REFERENCES statuses(status_id)
+    )''')
+    
     conn.commit()
     return conn
 
@@ -291,8 +300,8 @@ def render_db_update():
         cat_map = {c['title']: c['name'] for c in st.session_state.get('categories', [])}
 
         c1, c2 = st.columns(2)
-        d_from = c1.date_input("Datum od (edited)", value=st.session_state.db_date_from, key="db_date_from")
-        d_to = c2.date_input("Datum do (edited)", value=st.session_state.db_date_to, key="db_date_to")
+        d_from = c1.date_input("Datum od (edited)", key="db_date_from")
+        d_to = c2.date_input("Datum do (edited)", key="db_date_to")
         selected_cat_titles = st.multiselect("Kategorie (nevybráno = VŠE)", options=list(cat_map.keys()), key="db_cat_select")
         
         st.write("")
@@ -339,6 +348,10 @@ def render_db_update():
                 while True:
                     if stop_placeholder.button("🛑 ZASTAVIT PROCES", key=f"stop_api_{skip}", type="secondary", use_container_width=True):
                         ui_status.error("🛑 Zastaveno uživatelem."); st.stop()
+
+                    # ZMĚNA: Předání proměnné 'skip' do parametrů volání. 
+                    # Tím API ví, že má při dalším průchodu poslat dalších 1000 záznamů a nezacyklí se.
+                    base_params["skip"] = skip
 
                     res = session.get(f"{INSTANCE_URL}/api/v6/tickets.json", params=base_params)
                     if res.status_code != 200:
@@ -391,11 +404,20 @@ def render_db_update():
                 user_dict = t.get('user') or {}
                 db_user_id = db.get_or_create('users', user_dict.get('name'), title=user_dict.get('title'))
                 
+                # ZMĚNA: Ukládání všech statusů ticketu do vazební tabulky
                 db_status_id = None
                 status_list = t.get('statuses') or []
+                
                 if len(status_list) > 0:
                     s = status_list[0]
                     db_status_id = db.get_or_create('statuses', s.get('name'), title=s.get('title'))
+
+                # Vymazání starých statusů pro tento ticket (pokud jde o update)
+                db.c.execute("DELETE FROM ticket_statuses WHERE ticket_id = ?", (t_id,))
+                # Zápis všech aktuálních statusů do nové tabulky
+                for s in status_list:
+                    s_id = db.get_or_create('statuses', s.get('name'), title=s.get('title'))
+                    db.c.execute("INSERT OR IGNORE INTO ticket_statuses (ticket_id, status_id) VALUES (?, ?)", (t_id, s_id))
 
                 # --- AKTIVITY ---
                 real_activity_count = 0

@@ -25,6 +25,13 @@ def render_main_menu():
             "icon": "🗄️",
             "desc": "Export dat do Excelu a CSV."
         },
+        # ZMĚNA: Přidání modulu Úkolníček do hlavního menu
+        {
+            "label": "Úkolníček", 
+            "page": "todo", 
+            "icon": "📝",
+            "desc": "Správa priorit, úkolů a poznámek."
+        },
         {
             "label": "Aktualizace DB", 
             "page": "db-update", 

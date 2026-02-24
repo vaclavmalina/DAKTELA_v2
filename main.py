@@ -1,6 +1,7 @@
 import streamlit as st
 # Import všech modulů
-from modules import page_harvester, page_mainmenu, page_downloader, page_statistics, page_dbupdate, page_dbview
+# ZMĚNA: Přidán import page_todo
+from modules import page_harvester, page_mainmenu, page_downloader, page_statistics, page_dbupdate, page_dbview, page_todo
 
 # --- KONFIGURACE STRÁNKY ---
 st.set_page_config(page_title="Datio", layout="wide", initial_sidebar_state="expanded")
@@ -71,6 +72,7 @@ p_home = st.Page(page_mainmenu.render_main_menu, title="Domů", icon="🏠", def
 p_analysis = st.Page(page_harvester.render_harvester, title="Analýza ticketů", icon="🔎", url_path="analyza")
 p_stats    = st.Page(page_statistics.render_statistics, title="Statistiky", icon="📊", url_path="statistiky")
 p_download = st.Page(page_downloader.render_downloader, title="Stažení reportů", icon="🗄️", url_path="download")
+p_todo     = st.Page(page_todo.render_todo, title="Úkolníček", icon="📝", url_path="todo")
 
 p_db_update = st.Page(page_dbupdate.render_db_update, title="Aktualizace DB", icon="🔄", url_path="db-update")
 p_db_view   = st.Page(page_dbview.render_db_view,     title="Prohlížeč DB",   icon="💾", url_path="db-view")
@@ -81,15 +83,18 @@ st.session_state.page_map = {
     "analyza": p_analysis,
     "statistiky": p_stats,
     "download": p_download,
+    "todo": p_todo, 
     "db-update": p_db_update,
     "db-view": p_db_view
 }
 
 # 3. Definice struktury menu pro hamburger
+# ZMĚNA: Vytvořena nová sekce "Uživatel" a Úkolníček (p_todo) je přesunut do ní
 pages = {
     "Hlavní panel": [p_home],
     "Nástroje": [p_analysis, p_stats, p_download],
-    "Databáze": [p_db_update, p_db_view]
+    "Databáze": [p_db_update, p_db_view],
+    "Uživatel": [p_todo]
 }
 
 # Spuštění navigace

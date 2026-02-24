@@ -1,0 +1,58 @@
+[
+    {
+        "id": 0,
+        "text": "Statistiky - opravit zobrazování klientů",
+        "priority": "NORMAL",
+        "done": false,
+        "done_at": null
+    },
+    {
+        "id": 1,
+        "text": "Statistiky - pomalý button exportu",
+        "priority": "NORMAL",
+        "done": false,
+        "done_at": null
+    },
+    {
+        "id": 2,
+        "text": "Statistiky - opravit export grafů",
+        "priority": "NORMAL",
+        "done": false,
+        "done_at": null
+    },
+    {
+        "id": 3,
+        "text": "Přihlášení pomocí Google účtu",
+        "priority": "NICE TO HAVE",
+        "done": false,
+        "done_at": null
+    },
+    {
+        "id": 4,
+        "text": "Prostředí per role uživatele",
+        "priority": "NICE TO HAVE",
+        "done": false,
+        "done_at": null
+    },
+    {
+        "id": 5,
+        "text": "Upravit načítání dat z API do DB pro všechny tabulky",
+        "priority": "MANDATORY",
+        "done": false,
+        "done_at": null
+    },
+    {
+        "id": 6,
+        "text": "Napojit DB na AI",
+        "priority": "MANDATORY",
+        "done": false,
+        "done_at": null
+    },
+    {
+        "id": 7,
+        "text": "TEST",
+        "priority": "NORMAL",
+        "done": true,
+        "done_at": "24.02.2026 v 17:21"
+    }
+]
