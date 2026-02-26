@@ -8,6 +8,8 @@ import io
 import xlsxwriter
 import vl_convert as vlc 
 
+#test
+
 # --- KONFIGURACE CESTY K DB ---
 DB_PATH = os.path.join('data', 'daktela_data.db')
 
